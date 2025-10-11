@@ -9,20 +9,27 @@ export default function Home() {
     if (!input.trim()) return
     setStatus('Saving...')
 
-    const { data, error } = await supabase
-      .from('entries')
-      .insert([{ content: input, source: 'text' }])
-      .select()
-
-    if (error) {
-      console.error('Supabase insert error:', error)
-      setStatus(`Error saving entry: ${error.message}`)
-    } else {
-      console.log('Saved row:', data)
+    try {
+      const resp = await fetch('/api/entries', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: input, source: 'text' })
+      })
+      const payload = await resp.json()
+      if (!resp.ok) {
+        console.error('Server insert error:', payload)
+        setStatus(`Error saving entry: ${payload?.error || 'unknown error'}`)
+        return
+      }
+      console.log('Server saved:', payload)
       setInput('')
       setStatus('Saved successfully!')
+    } catch (e: any) {
+      console.error('Network error saving entry:', e)
+      setStatus(`Error saving entry: ${e?.message || String(e)}`)
     }
   }
+
 
 
   return (
