@@ -1,9 +1,48 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
+
+type Entry = {
+  id: string
+  content: string
+  source: string
+  created_at: string
+  user_id: string | null
+}
 
 export default function Home() {
   const [input, setInput] = useState('')
   const [status, setStatus] = useState<string | null>(null)
+  const [entries, setEntries] = useState<Entry[] | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  const fetchEntries = async () => {
+    setLoading(true)
+    try {
+      const resp = await fetch('/api/entries')
+      const payload = await resp.json()
+      if (!resp.ok) {
+        console.error('Fetch entries error:', payload)
+        setStatus(`Error loading entries: ${payload?.error || 'unknown'}`)
+        setEntries([])
+      } else {
+        setEntries(payload.data || [])
+        setStatus(null)
+      }
+    } catch (e: any) {
+      console.error('Network error fetching entries:', e)
+      setStatus(`Error loading entries: ${e?.message || String(e)}`)
+      setEntries([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchEntries()
+    // optional: poll every 20s during dev
+    // const id = setInterval(fetchEntries, 20000)
+    // return () => clearInterval(id)
+  }, [])
 
   const saveEntry = async () => {
     if (!input.trim()) return
@@ -24,13 +63,12 @@ export default function Home() {
       console.log('Server saved:', payload)
       setInput('')
       setStatus('Saved successfully!')
+      fetchEntries() // refresh the stream immediately
     } catch (e: any) {
       console.error('Network error saving entry:', e)
       setStatus(`Error saving entry: ${e?.message || String(e)}`)
     }
   }
-
-
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-indigo-50 to-white flex items-start justify-center p-8">
@@ -65,10 +103,27 @@ export default function Home() {
 
         <section className="space-y-4">
           <div className="text-sm text-slate-500">Today — Auto summary (10 PM)</div>
+
           <div className="rounded-lg bg-white p-4 border shadow-sm">
-            <div className="text-slate-700">
-              No entries yet — your thoughts will appear here once you start typing.
-            </div>
+            {loading && <div className="text-slate-500">Loading entries...</div>}
+
+            {!loading && entries && entries.length === 0 && (
+              <div className="text-slate-700">No entries yet — your thoughts will appear here once you start typing.</div>
+            )}
+
+            {!loading && entries && entries.length > 0 && (
+              <ul className="space-y-3">
+                {entries.map((e) => (
+                  <li key={e.id} className="p-3 border rounded-md bg-white">
+                    <div className="text-slate-800">{e.content}</div>
+                    <div className="mt-2 text-xs text-slate-400">
+                      {new Date(e.created_at).toLocaleString()}
+                      {e.user_id ? ` • user: ${e.user_id.slice(0,8)}` : ''}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         </section>
       </div>
