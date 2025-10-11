@@ -15,6 +15,75 @@ export default function Home() {
   const [entries, setEntries] = useState<Entry[] | null>(null)
   const [loading, setLoading] = useState(false)
 
+  // auth
+  const [user, setUser] = useState<{ id: string; email?: string } | null>(null)
+  const [emailForOtp, setEmailForOtp] = useState('')
+
+  // fetch current session user
+  const loadUser = async () => {
+    try {
+      const { data } = await supabase.auth.getUser()
+      if (data?.user) {
+        setUser({ id: data.user.id, email: data.user.email ?? undefined })
+      } else {
+        setUser(null)
+      }
+    } catch (e) {
+      console.error('getUser error', e)
+      setUser(null)
+    }
+  }
+
+  useEffect(() => {
+    loadUser()
+    // listen to auth changes (sign in / sign out)
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        setUser({ id: session.user.id, email: session.user.email ?? undefined })
+      } else {
+        setUser(null)
+      }
+    })
+    return () => sub.subscription.unsubscribe()
+  }, [])
+
+  const sendMagicLink = async () => {
+    if (!emailForOtp || !emailForOtp.includes('@')) {
+      setStatus('Enter a valid email for magic link.')
+      return
+    }
+    setStatus('Sending magic link...')
+    const { error } = await supabase.auth.signInWithOtp({ email: emailForOtp })
+    if (error) {
+      console.error('magic link error', error)
+      setStatus(`Error sending link: ${error.message}`)
+    } else {
+      setStatus('Magic link sent — check your inbox.')
+    }
+  }
+
+  const signInWithGoogle = async () => {
+    setStatus('Redirecting to Google...')
+    const { error } = await supabase.auth.signInWithOAuth({ provider: 'google' })
+    if (error) {
+      console.error('Google sign-in error', error)
+      setStatus(`Error starting Google sign-in: ${error.message}`)
+    }
+  }
+
+  const signOut = async () => {
+    setStatus('Signing out...')
+    const { error } = await supabase.auth.signOut()
+    if (error) {
+      console.error('Sign out error', error)
+      setStatus(`Error signing out: ${error.message}`)
+    } else {
+      setUser(null)
+      setStatus(null)
+    }
+  }
+
+  // fetch entries from server API (admin / public read)
   const fetchEntries = async () => {
     setLoading(true)
     try {
@@ -39,34 +108,55 @@ export default function Home() {
 
   useEffect(() => {
     fetchEntries()
-    // optional: poll every 20s during dev
-    // const id = setInterval(fetchEntries, 20000)
-    // return () => clearInterval(id)
   }, [])
 
+  // save entry:
+  // - if signed in -> use client insert with user_id so RLS accepts it
+  // - else -> fallback to server API route (service_role writes)
   const saveEntry = async () => {
     if (!input.trim()) return
     setStatus('Saving...')
 
-    try {
-      const resp = await fetch('/api/entries', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: input, source: 'text' })
-      })
-      const payload = await resp.json()
-      if (!resp.ok) {
-        console.error('Server insert error:', payload)
-        setStatus(`Error saving entry: ${payload?.error || 'unknown error'}`)
-        return
+    if (user) {
+      // client-side insert, RLS will allow because user is authenticated
+      try {
+        const { data, error } = await supabase
+          .from('entries')
+          .insert([{ content: input, source: 'text', user_id: user.id }])
+          .select()
+        if (error) {
+          console.error('Client insert error:', error)
+          setStatus(`Error saving entry: ${error.message}`)
+          return
+        }
+        setInput('')
+        setStatus('Saved successfully!')
+        fetchEntries()
+      } catch (e: any) {
+        console.error('Client network error saving entry:', e)
+        setStatus(`Error saving entry: ${e?.message || String(e)}`)
       }
-      console.log('Server saved:', payload)
-      setInput('')
-      setStatus('Saved successfully!')
-      fetchEntries() // refresh the stream immediately
-    } catch (e: any) {
-      console.error('Network error saving entry:', e)
-      setStatus(`Error saving entry: ${e?.message || String(e)}`)
+    } else {
+      // fallback: server API (service role key)
+      try {
+        const resp = await fetch('/api/entries', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: input, source: 'text' })
+        })
+        const payload = await resp.json()
+        if (!resp.ok) {
+          console.error('Server insert error:', payload)
+          setStatus(`Error saving entry: ${payload?.error || 'unknown error'}`)
+          return
+        }
+        setInput('')
+        setStatus('Saved successfully! (via server)')
+        fetchEntries()
+      } catch (e: any) {
+        console.error('Network error saving entry:', e)
+        setStatus(`Error saving entry: ${e?.message || String(e)}`)
+      }
     }
   }
 
@@ -78,8 +168,30 @@ export default function Home() {
           <p className="text-sm text-slate-600">Your thoughts. Finally understood.</p>
         </header>
 
-        <div className="mb-4 p-4 rounded-lg border border-slate-100 bg-white shadow-sm">
-          <strong>Privacy:</strong> Your thoughts are encrypted and private.
+        <div className="mb-4 p-4 rounded-lg border border-slate-100 bg-white shadow-sm flex items-center justify-between">
+          <div>
+            <strong>Privacy:</strong> Your thoughts are encrypted and private.
+          </div>
+
+          <div className="flex items-center gap-3">
+            {user ? (
+              <>
+                <div className="text-sm text-slate-700">Signed in: {user.email ?? user.id.slice(0,8)}</div>
+                <button onClick={signOut} className="text-sm underline">Sign out</button>
+              </>
+            ) : (
+              <div className="flex items-center gap-2">
+                <input
+                  value={emailForOtp}
+                  onChange={(e) => setEmailForOtp(e.target.value)}
+                  placeholder="you@example.com"
+                  className="rounded-md border px-2 py-1 text-sm"
+                />
+                <button onClick={sendMagicLink} className="rounded-md bg-indigo-600 text-white px-3 py-1 text-sm">Magic link</button>
+                <button onClick={signInWithGoogle} className="rounded-md border px-3 py-1 text-sm">Sign in with Google</button>
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="mb-6">
