@@ -1,0 +1,13 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Minimal base to get the Mindstream calm look */
+html,body,#__next {
+  height: 100%;
+}
+
+body {
+  @apply bg-white text-slate-800 antialiased;
+  font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+}
