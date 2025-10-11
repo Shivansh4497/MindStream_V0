@@ -62,14 +62,20 @@ export default function Home() {
     }
   }
 
+  // replace your signInWithGoogle function with this
   const signInWithGoogle = async () => {
     setStatus('Redirecting to Google...')
-    const { error } = await supabase.auth.signInWithOAuth({ provider: 'google' })
+    const redirectTo = window.location.origin // ensures return to the current site (local or deployed)
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo }
+    })
     if (error) {
       console.error('Google sign-in error', error)
       setStatus(`Error starting Google sign-in: ${error.message}`)
     }
   }
+
 
   const signOut = async () => {
     setStatus('Signing out...')
