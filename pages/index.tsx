@@ -1,7 +1,24 @@
 import { useState } from 'react'
+import { supabase } from '../lib/supabaseClient'
 
 export default function Home() {
   const [input, setInput] = useState('')
+  const [status, setStatus] = useState<string | null>(null)
+
+  const saveEntry = async () => {
+    if (!input.trim()) return
+    setStatus('Saving...')
+    const { error } = await supabase
+      .from('entries')
+      .insert([{ content: input, source: 'text' }])
+    if (error) {
+      console.error(error)
+      setStatus('Error saving entry.')
+    } else {
+      setInput('')
+      setStatus('Saved successfully!')
+    }
+  }
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-indigo-50 to-white flex items-start justify-center p-8">
@@ -11,12 +28,10 @@ export default function Home() {
           <p className="text-sm text-slate-600">Your thoughts. Finally understood.</p>
         </header>
 
-        {/* Privacy modal placeholder */}
         <div className="mb-4 p-4 rounded-lg border border-slate-100 bg-white shadow-sm">
-          <strong>Privacy:</strong> Your thoughts are encrypted and private. (Privacy modal will show on first login)
+          <strong>Privacy:</strong> Your thoughts are encrypted and private.
         </div>
 
-        {/* Input bar */}
         <div className="mb-6">
           <label className="sr-only">New thought</label>
           <div className="flex gap-2">
@@ -27,22 +42,23 @@ export default function Home() {
               placeholder="What’s on your mind?"
             />
             <button
-              onClick={() => { setInput(''); alert('Saved (demo)') }}
+              onClick={saveEntry}
               className="rounded-md bg-indigo-700 text-white px-4 py-2"
             >
               Save
             </button>
           </div>
+          {status && <p className="mt-2 text-sm text-slate-600">{status}</p>}
         </div>
 
-        {/* Stream placeholder */}
         <section className="space-y-4">
           <div className="text-sm text-slate-500">Today — Auto summary (10 PM)</div>
           <div className="rounded-lg bg-white p-4 border shadow-sm">
-            <div className="text-slate-700">No entries yet — your thoughts will appear here once you start typing.</div>
+            <div className="text-slate-700">
+              No entries yet — your thoughts will appear here once you start typing.
+            </div>
           </div>
         </section>
-
       </div>
     </main>
   )
