@@ -8,17 +8,22 @@ export default function Home() {
   const saveEntry = async () => {
     if (!input.trim()) return
     setStatus('Saving...')
-    const { error } = await supabase
+
+    const { data, error } = await supabase
       .from('entries')
       .insert([{ content: input, source: 'text' }])
+      .select()
+
     if (error) {
-      console.error(error)
-      setStatus('Error saving entry.')
+      console.error('Supabase insert error:', error)
+      setStatus(`Error saving entry: ${error.message}`)
     } else {
+      console.log('Saved row:', data)
       setInput('')
       setStatus('Saved successfully!')
     }
   }
+
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-indigo-50 to-white flex items-start justify-center p-8">
