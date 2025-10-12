@@ -123,48 +123,36 @@ export default function Home() {
     if (!input.trim()) return
     setStatus('Saving...')
 
-    if (user) {
-      // client-side insert, RLS will allow because user is authenticated
-      try {
-        const { data, error } = await supabase
-          .from('entries')
-          .insert([{ content: input, source: 'text', user_id: user.id }])
-          .select()
-        if (error) {
-          console.error('Client insert error:', error)
-          setStatus(`Error saving entry: ${error.message}`)
-          return
-        }
-        setInput('')
-        setStatus('Saved successfully!')
-        fetchEntries()
-      } catch (e: any) {
-        console.error('Client network error saving entry:', e)
-        setStatus(`Error saving entry: ${e?.message || String(e)}`)
+    // get current user
+    const { data: userData } = await supabase.auth.getUser()
+    const user = userData?.user
+
+    if (!user) {
+      setStatus('Please sign in (Google or magic link) to save your thought.')
+      return
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('entries')
+        .insert([{ content: input, source: 'text', user_id: user.id }])
+        .select()
+
+      if (error) {
+        console.error('Client insert error:', error)
+        setStatus(`Error saving entry: ${error.message}`)
+        return
       }
-    } else {
-      // fallback: server API (service role key)
-      try {
-        const resp = await fetch('/api/entries', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ content: input, source: 'text' })
-        })
-        const payload = await resp.json()
-        if (!resp.ok) {
-          console.error('Server insert error:', payload)
-          setStatus(`Error saving entry: ${payload?.error || 'unknown error'}`)
-          return
-        }
-        setInput('')
-        setStatus('Saved successfully! (via server)')
-        fetchEntries()
-      } catch (e: any) {
-        console.error('Network error saving entry:', e)
-        setStatus(`Error saving entry: ${e?.message || String(e)}`)
-      }
+
+      setInput('')
+      setStatus('Saved successfully!')
+      fetchEntries()
+    } catch (e: any) {
+      console.error('Client network error saving entry:', e)
+      setStatus(`Error saving entry: ${e?.message || String(e)}`)
     }
   }
+
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-indigo-50 to-white flex items-start justify-center p-8">
