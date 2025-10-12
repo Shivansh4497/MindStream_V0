@@ -21,6 +21,7 @@ export default function Home() {
   const [isSupported, setIsSupported] = useState<boolean | null>(null)
   const [interim, setInterim] = useState('')
   const [finalText, setFinalText] = useState('')
+  const [draftVoiceText, setDraftVoiceText] = useState<string | null>(null)
   const recogRef = useRef<any>(null)
   const safetyTimeoutRef = useRef<number | null>(null)
   const holdingRef = useRef(false)
@@ -116,7 +117,6 @@ export default function Home() {
     // Restart if silence ended recognition while holding
     r.onend = () => {
       if (holdingRef.current) {
-        // restart recognition
         try {
           setTimeout(() => {
             try {
@@ -167,7 +167,7 @@ export default function Home() {
       setIsRecording(true)
       setInterim('')
       setFinalText('')
-      setStatus('Recording... release to stop and save')
+      setStatus('Recording... release to stop')
       safetyTimeoutRef.current = window.setTimeout(() => {
         holdingRef.current = false
         stopRecording()
@@ -196,14 +196,9 @@ export default function Home() {
       setStatus('No speech captured.')
       return
     }
-    setStatus('Saving transcription...')
-    try {
-      await saveTextEntry(text, 'voice')
-      setStatus('Saved voice transcription.')
-    } catch (err: any) {
-      console.error('save error', err)
-      setStatus('Save failed: ' + (err?.message || 'unknown'))
-    }
+    // Instead of auto-saving, show editable draft
+    setDraftVoiceText(text)
+    setStatus('Review your transcription below.')
   }
 
   // ---------------- UI ----------------
@@ -250,10 +245,10 @@ export default function Home() {
             <div className="mb-3">
               <div className="text-sm font-medium">Voice recording — Tap & Hold</div>
               <div className="text-xs text-slate-500 mt-1">
-                Press and hold the button below to record your reflection. Release to stop — your speech will be transcribed and saved automatically.
+                Press and hold the button below to record your reflection. Release to stop — your speech will be transcribed here. Review or edit before saving.
               </div>
               <div className="text-xs text-slate-500 mt-1">
-                Tip: Speak in short bursts (3–20s) for best accuracy. Works best in Chrome or Edge on desktop or Android.
+                Tip: Speak in short bursts (3–20 s) for best accuracy. Works best in Chrome or Edge on desktop or Android.
               </div>
             </div>
 
@@ -293,6 +288,37 @@ export default function Home() {
                 {finalText} <span className="text-slate-400 italic">{interim}</span>
               </div>
             </div>
+
+            {/* Draft text editor after release */}
+            {draftVoiceText && (
+              <div className="mt-4 space-y-2">
+                <textarea
+                  value={draftVoiceText}
+                  onChange={(e) => setDraftVoiceText(e.target.value)}
+                  rows={4}
+                  className="w-full border rounded-md p-2 text-sm"
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={async () => {
+                      try {
+                        await saveTextEntry(draftVoiceText, 'voice')
+                        setStatus('Saved voice transcription.')
+                        setDraftVoiceText(null)
+                      } catch (err: any) {
+                        setStatus('Save failed: ' + (err?.message || 'unknown'))
+                      }
+                    }}
+                    className="bg-indigo-600 text-white px-3 py-1 rounded-md text-sm"
+                  >
+                    Save
+                  </button>
+                  <button onClick={() => setDraftVoiceText(null)} className="border px-3 py-1 rounded-md text-sm">
+                    Discard
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -305,7 +331,7 @@ export default function Home() {
               <ul className="space-y-3">
                 {entries.map((e) => (
                   <li key={e.id} className="p-3 border rounded-md bg-white">
-                    <div className="text-slate-800">{e.content}</div>
+                    <div className="text-slate-800 whitespace-pre-wrap">{e.content}</div>
                     <div className="mt-2 text-xs text-slate-400">{new Date(e.created_at).toLocaleString()}</div>
                   </li>
                 ))}
