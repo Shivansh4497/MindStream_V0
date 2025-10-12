@@ -731,8 +731,24 @@ export default function Home() {
           </div>
         </section>
 
-        {status && <div className="mt-6 text-sm text-slate-600">{status}</div>}
+        {/* Visual status message */}
+        {status && (
+          <div className="mt-6 text-sm text-slate-600" aria-live="polite">
+            {status}
+          </div>
+        )}
+
+        {/* Screen reader-only live region */}
+        <div
+          aria-live="polite"
+          aria-atomic="true"
+          className="sr-only"
+        >
+            {status}
+        </div>
+
         <footer className="mt-8 text-xs text-slate-400">Private • Encrypted • Yours</footer>
+
       </main>
     </div>
   )
