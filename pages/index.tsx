@@ -22,7 +22,7 @@ export default function Home() {
   const [interim, setInterim] = useState('')
   const [finalText, setFinalText] = useState('')
   const recogRef = useRef<any>(null)
-  const timeoutRef = useRef<number | null>(null)
+  const safetyTimeoutRef = useRef<number | null>(null)
 
   // ---------------- AUTH ----------------
   useEffect(() => {
@@ -88,7 +88,7 @@ export default function Home() {
     r.lang = 'en-US'
     r.interimResults = true
     r.maxAlternatives = 1
-    r.continuous = false
+    r.continuous = false // we want start/stop per press
     recogRef.current = r
 
     r.onresult = (event: any) => {
@@ -108,13 +108,14 @@ export default function Home() {
 
     r.onerror = (e: any) => {
       console.error('SpeechRecognition error', e)
-      setStatus(`Error: ${e.error}`)
+      setStatus(`Recognition error: ${e?.error || 'unknown'}`)
       setIsRecording(false)
     }
 
     r.onend = () => {
+      // the recognition stopped (either by us calling stop or because of silence)
       setIsRecording(false)
-      clearTimeoutIfAny()
+      clearSafetyTimeout()
     }
 
     return () => {
@@ -122,18 +123,19 @@ export default function Home() {
       r.onerror = null
       r.onend = null
       recogRef.current = null
-      clearTimeoutIfAny()
+      clearSafetyTimeout()
     }
   }, [])
 
-  const clearTimeoutIfAny = () => {
-    if (timeoutRef.current) {
-      window.clearTimeout(timeoutRef.current)
-      timeoutRef.current = null
+  const clearSafetyTimeout = () => {
+    if (safetyTimeoutRef.current) {
+      window.clearTimeout(safetyTimeoutRef.current)
+      safetyTimeoutRef.current = null
     }
   }
 
-  const start = () => {
+  // START recording (called on press)
+  const startRecording = () => {
     if (!recogRef.current) {
       setStatus('Voice recognition not supported in this browser.')
       return
@@ -143,8 +145,11 @@ export default function Home() {
       setIsRecording(true)
       setInterim('')
       setFinalText('')
-      setStatus('Listening...')
-      timeoutRef.current = window.setTimeout(() => stop(), 45_000)
+      setStatus('Recording... release to stop and save')
+      // safety: auto-stop if user holds > 60s
+      safetyTimeoutRef.current = window.setTimeout(() => {
+        stopRecording()
+      }, 60_000)
     } catch (err: any) {
       console.error('start error', err)
       setStatus('Could not start mic (check permissions).')
@@ -152,22 +157,54 @@ export default function Home() {
     }
   }
 
-  const stop = async () => {
+  // STOP recording (called on release)
+  const stopRecording = async () => {
     try {
       recogRef.current?.stop()
-    } catch (e) {}
-    clearTimeoutIfAny()
+    } catch (e) {
+      // ignore
+    }
+    clearSafetyTimeout()
     setIsRecording(false)
     const text = (finalText + (interim ? ' ' + interim : '')).trim()
-    if (!text) return setStatus('No speech detected.')
+    setInterim('')
+    setFinalText('')
+    if (!text) {
+      setStatus('No speech captured.')
+      return
+    }
     setStatus('Saving transcription...')
     try {
       await saveTextEntry(text, 'voice')
       setStatus('Saved voice transcription.')
-      setInterim('')
-      setFinalText('')
     } catch (err: any) {
-      setStatus('Save failed: ' + err.message)
+      console.error('save error', err)
+      setStatus('Save failed: ' + (err?.message || 'unknown'))
+    }
+  }
+
+  // handlers to support mouse, touch, keyboard and cancel events
+  const onPressStart = (e?: React.MouseEvent | React.TouchEvent) => {
+    e?.preventDefault()
+    // start only if not already recording
+    if (!isRecording) startRecording()
+  }
+  const onPressEnd = (e?: React.MouseEvent | React.TouchEvent) => {
+    e?.preventDefault()
+    if (isRecording) stopRecording()
+  }
+
+  // keyboard support: start on Space/Enter down, stop on keyup
+  const onKeyDownRecord = (e: React.KeyboardEvent) => {
+    if (e.key === ' ' || e.key === 'Spacebar' || e.key === 'Enter') {
+      e.preventDefault()
+      if (!isRecording) startRecording()
+    }
+  }
+  const onKeyUpRecord = (e: React.KeyboardEvent) => {
+    if (e.key === ' ' || e.key === 'Spacebar' || e.key === 'Enter') {
+      e.preventDefault()
+      if (isRecording) stopRecording()
     }
   }
 
@@ -181,7 +218,9 @@ export default function Home() {
         </header>
 
         <div className="mb-4 p-4 rounded-lg border border-slate-100 bg-white shadow-sm flex items-center justify-between">
-          <div><strong>Privacy:</strong> Your voice is processed by your browser’s built-in speech service (e.g. Google or Apple). Audio isn’t stored or sent to us.</div>
+          <div>
+            <strong>Privacy:</strong> Voice is processed by your browser’s built-in speech service (e.g. Google or Apple). Audio is not stored by us when using Browser STT.
+          </div>
           <div className="flex items-center gap-3">
             {user ? (
               <>
@@ -190,7 +229,7 @@ export default function Home() {
               </>
             ) : (
               <div className="flex items-center gap-2">
-                <input value={email} onChange={(e)=>setEmail(e.target.value)} placeholder="you@example.com" className="rounded-md border px-2 py-1 text-sm" />
+                <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" className="rounded-md border px-2 py-1 text-sm" />
                 <button onClick={sendMagicLink} className="rounded-md bg-indigo-600 text-white px-3 py-1 text-sm">Magic link</button>
                 <button onClick={signInWithGoogle} className="rounded-md border px-3 py-1 text-sm">Sign in with Google</button>
               </div>
@@ -201,34 +240,59 @@ export default function Home() {
         {/* Manual text input */}
         <div className="mb-6">
           <div className="flex gap-2">
-            <input value={input} onChange={(e)=>setInput(e.target.value)} className="flex-1 rounded-md border px-3 py-2 shadow-sm" placeholder="What’s on your mind?" />
-            <button onClick={()=>saveTextEntry(input)} className="rounded-md bg-indigo-700 text-white px-4 py-2">Save</button>
+            <input value={input} onChange={(e) => setInput(e.target.value)} className="flex-1 rounded-md border px-3 py-2 shadow-sm" placeholder="What’s on your mind?" />
+            <button onClick={() => saveTextEntry(input)} className="rounded-md bg-indigo-700 text-white px-4 py-2">Save</button>
           </div>
           {status && <p className="mt-2 text-sm text-slate-600">{status}</p>}
         </div>
 
-        {/* Voice STT section */}
+        {/* Voice STT section with tap-and-hold */}
         <div className="mb-6">
-          {isSupported ? (
-            <div className="space-y-2">
+          <div className="rounded-lg bg-white p-4 border shadow-sm">
+            <div className="mb-3">
+              <div className="text-sm font-medium">Voice recording (tap & hold)</div>
+              <div className="text-xs text-slate-500 mt-1">
+                Press and hold the button below to record. Release to stop — the recording will automatically be transcribed and saved to your private journal.
+              </div>
+              <div className="text-xs text-slate-500 mt-1">
+                Tip: For best results speak in short bursts (3–20 seconds). If your browser doesn't support voice recognition, use the text box above.
+              </div>
+            </div>
+
+            {isSupported ? (
               <div className="flex items-center gap-3">
                 <button
-                  onClick={() => (isRecording ? stop() : start())}
-                  className={`px-4 py-2 rounded-md ${isRecording ? 'bg-red-600 text-white' : 'bg-white border'}`}
+                  role="button"
+                  aria-pressed={isRecording}
+                  aria-label="Hold to record voice"
+                  onMouseDown={onPressStart}
+                  onMouseUp={onPressEnd}
+                  onMouseLeave={onPressEnd}
+                  onTouchStart={onPressStart}
+                  onTouchEnd={onPressEnd}
+                  onTouchCancel={onPressEnd}
+                  onKeyDown={onKeyDownRecord}
+                  onKeyUp={onKeyUpRecord}
+                  className={`px-5 py-3 rounded-md focus:outline-none ${isRecording ? 'bg-red-600 text-white' : 'bg-white border'}`}
                 >
-                  {isRecording ? 'Stop' : 'Record (Browser STT)'}
+                  {isRecording ? 'Release to stop' : 'Hold to record'}
                 </button>
-                <div className="text-sm text-slate-500">{isRecording ? 'Listening...' : 'Tap to record up to 45s'}</div>
+
+                <div className="text-sm text-slate-500">
+                  {isRecording ? 'Recording… release to finish' : 'Hold button and speak'}
+                </div>
               </div>
-              <div className="p-2 rounded border bg-white min-h-[40px]">
-                <div className="text-slate-800">{finalText}<span className="text-slate-400 italic">{interim}</span></div>
+            ) : (
+              <div className="text-sm text-slate-600">
+                Voice input not supported in this browser. Try Chrome or Edge on desktop or Android.
               </div>
+            )}
+
+            {/* live interim display */}
+            <div className="mt-3 p-2 rounded border bg-slate-50 min-h-[44px]">
+              <div className="text-slate-800">{finalText} <span className="text-slate-400 italic">{interim}</span></div>
             </div>
-          ) : (
-            <div className="p-3 rounded-md border bg-white text-sm text-slate-600">
-              Voice input not supported in this browser. Try Chrome or Edge on desktop or Android.
-            </div>
-          )}
+          </div>
         </div>
 
         {/* Entries */}
