@@ -32,7 +32,7 @@ Tone: warm, encouraging, yet realistic. Quote short phrases from entries when re
 Do not make up facts; if unclear, say so.`
 
     const body = {
-      model: 'llama3-8b-8192', // or "mixtral-8x7b-32768"
+      model: 'mixtral-8x7b-32768', // or "mixtral-8x7b-32768"
       temperature: 0.3,
       max_tokens: 900,
       messages: [
