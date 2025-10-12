@@ -26,6 +26,12 @@ export default function Home() {
   const safetyTimeoutRef = useRef<number | null>(null)
   const holdingRef = useRef(false)
 
+  // Draft & summary state (add near other useState declarations)
+  const [draftSummary, setDraftSummary] = useState<string | null>(null)
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [lastSummaryRange, setLastSummaryRange] = useState<{start:string,end:string}|null>(null)
+
+
   // ---------------- AUTH ----------------
   useEffect(() => {
     const load = async () => {
@@ -78,6 +84,81 @@ export default function Home() {
     fetchEntries()
   }
 
+  // generate the 24h summary by fetching last 24h entries and calling server
+  async function generate24hSummary() {
+    try {
+      setIsGenerating(true)
+      setStatus('Loading recent entries...')
+      const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+      const { data: entries24, error } = await supabase
+        .from('entries')
+        .select('id, content, created_at, source, metadata')
+        .gte('created_at', since)
+        .order('created_at', { ascending: true })
+
+      if (error) {
+        setStatus('Could not load recent entries: ' + error.message)
+        setIsGenerating(false)
+        return
+      }
+      if (!entries24 || entries24.length === 0) {
+        setStatus('No entries in the past 24 hours.')
+        setIsGenerating(false)
+        return
+      }
+
+      setStatus('Generating summary — this may take a few seconds...')
+      const resp = await fetch('/api/generate-summary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entries: entries24 })
+      })
+      const payload = await resp.json()
+      if (!resp.ok) {
+        setStatus('Summary generation failed: ' + (payload?.error || JSON.stringify(payload)))
+        setIsGenerating(false)
+        return
+      }
+
+      const generated = payload.summary as string
+    // set draft for user to edit & save
+      setDraftSummary(generated)
+      setLastSummaryRange({ start: since, end: new Date().toISOString() })
+      setStatus('Summary ready — please review and save.')
+    } catch (err: any) {
+      console.error('generate24hSummary error', err)
+      setStatus('Failed to generate summary: ' + (err?.message || String(err)))
+    } finally {
+      setIsGenerating(false)
+    }
+  }
+
+// save the user-edited draft summary into the summaries table
+  async function saveDraftSummary() {
+    if (!draftSummary) return
+    try {
+      setStatus('Saving summary...')
+      const { data: u } = await supabase.auth.getUser()
+      const uid = u?.user?.id
+      if (!uid) throw new Error('Not signed in')
+
+      const { error } = await supabase.from('summaries').insert([{
+        user_id: uid,
+        range_start: lastSummaryRange?.start ?? new Date(Date.now() - 24*60*60*1000).toISOString(),
+        range_end: lastSummaryRange?.end ?? new Date().toISOString(),
+        summary_text: draftSummary
+      }])
+
+      if (error) throw error
+      setDraftSummary(null)
+      setStatus('Saved summary.')
+      fetchEntries()
+    } catch (err: any) {
+      console.error('saveDraftSummary error', err)
+      setStatus('Could not save summary: ' + (err?.message || String(err)))
+    }
+  }
+ 
   // ---------------- WEB SPEECH API ----------------
   useEffect(() => {
     const Recog = window.SpeechRecognition || window.webkitSpeechRecognition || null
@@ -321,6 +402,40 @@ export default function Home() {
             )}
           </div>
         </div>
+        {/* — 24-hour Summary generator UI — */}
+  <div className="mb-6">
+    <div className="flex items-center justify-between mb-2">
+      <div className="text-sm font-medium">Daily Reflection — 24-hour summary</div>
+      <div>
+        <button
+          onClick={generate24hSummary}
+          disabled={isGenerating}
+          className="rounded-md bg-indigo-600 text-white px-3 py-1 text-sm"
+        >
+          {isGenerating ? 'Generating...' : 'Generate 24-hour summary'}
+        </button>
+      </div>
+    </div>
+    <div className="text-xs text-slate-500 mb-2">
+      Tap “Generate” to create an encouraging, factual summary of what you recorded today. You can edit before saving.
+    </div>
+
+    {/* Draft editor shown after generation */}
+    {draftSummary && (
+      <div className="rounded-md border p-3 bg-white space-y-2">
+        <textarea
+          value={draftSummary}
+          onChange={(e) => setDraftSummary(e.target.value)}
+          rows={6}
+          className="w-full p-2 border rounded-md text-sm"
+        />
+        <div className="flex gap-2">
+          <button onClick={saveDraftSummary} className="bg-green-600 text-white px-3 py-1 rounded-md text-sm">Save summary</button>
+          <button onClick={() => setDraftSummary(null)} className="border px-3 py-1 rounded-md text-sm">Discard</button>
+        </div>
+      </div>
+    )}
+  </div>
 
         {/* Entries */}
         <section className="space-y-4">
