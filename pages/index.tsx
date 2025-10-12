@@ -427,16 +427,26 @@ export default function Home() {
       recogRef.current?.stop()
     } catch {}
     setIsRecording(false)
+
+  // combine final + interim
     const text = (finalText + (interim ? ' ' + interim : '')).trim()
+
+  // clear interim state
     setInterim('')
-    setFinalText('')
+
     if (!text) {
       setStatus('No speech captured.')
       return
     }
-    await saveTextEntry(text, 'voice')
-    setStatus('Saved voice entry.')
-  }
+
+  // IMPORTANT: do NOT auto-save — instead put transcription into edit buffer
+    setFinalText(text) // user will now see and can edit before saving
+    setStatus('Transcription ready — edit if needed, then click Save.')
+    showToast('Transcription ready — edit and press Save', 'info', 2200)
+
+  // do not call saveTextEntry here
+}
+
 
   // ---------------- expansion helpers ----------------
   const toggleExpand = (id: string) => {
@@ -494,47 +504,82 @@ export default function Home() {
           </div>
         </div>
 
-        {/* input and record */}
-        <div className="mb-8">
-          <div className="flex gap-3 items-start">
-            <input
-              value={finalText}
-              onChange={(e) => setFinalText(e.target.value)}
-              className="flex-1 rounded-md border px-4 py-3 shadow-sm text-[15px] leading-relaxed"
-              placeholder="What’s on your mind?"
-              aria-label="What's on your mind?"
-            />
-            <div className="flex flex-col gap-2">
-              <button onClick={() => saveTextEntry(finalText)} className="rounded-md bg-indigo-700 text-white px-4 py-2">
-                Save
-              </button>
+  {/* input and record - REPLACEMENT */}
+  <div className="mb-8">
+    <div className="flex gap-3 items-start">
+      {/* If there's a recorded transcription waiting for review, show a textarea */}
+      {finalText ? (
+        <textarea
+          value={finalText}
+          onChange={(e) => setFinalText(e.target.value)}
+          rows={4}
+          className="flex-1 rounded-md border px-4 py-3 shadow-sm text-[15px] leading-relaxed"
+          placeholder="Edit your transcription here before saving..."
+          aria-label="Edit transcription"
+        />
+      ) : (
+        <input
+          value={finalText}
+          onChange={(e) => setFinalText(e.target.value)}
+          className="flex-1 rounded-md border px-4 py-3 shadow-sm text-[15px] leading-relaxed"
+          placeholder="What’s on your mind?"
+          aria-label="What's on your mind?"
+        />
+      )}
 
-              <button
-                onMouseDown={startRecording}
-                onMouseUp={stopRecording}
-                onTouchStart={startRecording}
-                onTouchEnd={stopRecording}
-                className={`rounded-md px-4 py-2 ${isRecording ? 'bg-teal-400 text-white' : 'bg-white border'}`}
-                title="Hold to record"
-                aria-pressed={isRecording}
-              >
-                {isRecording ? 'Recording…' : 'Hold to record'}
-              </button>
-            </div>
-          </div>
+      <div className="flex flex-col gap-2">
+        {/* Save typed or edited transcription */}
+        <button
+          onClick={() => saveTextEntry(finalText)}
+          disabled={!finalText || finalText.trim().length === 0}
+          className="rounded-md bg-indigo-700 text-white px-4 py-2 disabled:opacity-50"
+        >
+          Save
+        </button>
 
-          <div className="mt-4 flex items-center justify-between">
-            <div className="text-xs text-slate-500">Daily Reflection — 24-hour summary</div>
-            <button
-              onClick={generate24hSummary}
-              disabled={isGenerating}
-              className="rounded-md bg-indigo-600 text-white px-3 py-1 text-sm transition-all hover:scale-[1.02]"
-            >
-              {isGenerating ? 'Reflecting…' : 'Reflect on your day'}
-            </button>
-          </div>
-          <div className="text-xs text-slate-500 mt-2">Generate a motivational reflection from your entries, then rate or discard.</div>
+        {/* Hold to record button unchanged */}
+        <button
+          onMouseDown={startRecording}
+          onMouseUp={stopRecording}
+          onTouchStart={startRecording}
+          onTouchEnd={stopRecording}
+          className={`rounded-md px-4 py-2 ${isRecording ? 'bg-teal-400 text-white' : 'bg-white border'}`}
+          title="Hold to record"
+          aria-pressed={isRecording}
+        >
+          {isRecording ? 'Recording…' : 'Hold to record'}
+        </button>
+      </div>
+    </div>
+
+    {/* When there is a recorded transcription, show explicit Save / Cancel controls and hint */}
+    {finalText && (
+      <div className="mt-3 flex items-center gap-3">
+        <div className="text-xs text-slate-500">Edit your transcription, then click Save. Or click Cancel to discard.</div>
+        <div className="ml-auto flex gap-2">
+          <button
+            onClick={() => {
+              // Cancel / discard transcript
+              setFinalText('')
+              setStatus('Transcription discarded.')
+              showToast('Transcription discarded', 'info')
+            }}
+            className="px-3 py-1 border rounded-md text-sm text-slate-600 bg-white"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => saveTextEntry(finalText)}
+            disabled={!finalText || finalText.trim().length === 0}
+            className="px-3 py-1 bg-indigo-600 text-white rounded-md text-sm"
+          >
+            Save transcription
+          </button>
         </div>
+      </div>
+    )}
+  </div>
+
 
         {/* generated summary (preview -> rate) */}
         {generatedSummary && (
