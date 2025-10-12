@@ -6,14 +6,6 @@ type Entry = { content: string; created_at: string; source?: string; metadata?: 
 const GROQ_KEY = process.env.GROQ_API_KEY
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
-const r = await fetch(GROQ_URL, {
-  method: "POST",
-  headers: {
-    "Authorization": `Bearer ${GROQ_KEY}`,
-    "Content-Type": "application/json"
-  },
-  body: JSON.stringify(body)
-})
 
 const r = await fetch(GROQ_URL, {
   method: 'POST',
