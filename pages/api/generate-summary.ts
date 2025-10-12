@@ -4,7 +4,37 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 type Entry = { content: string; created_at: string; source?: string; metadata?: any }
 
 const GROQ_KEY = process.env.GROQ_API_KEY
-const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions'
+const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+
+const r = await fetch(GROQ_URL, {
+  method: "POST",
+  headers: {
+    "Authorization": `Bearer ${GROQ_KEY}`,
+    "Content-Type": "application/json"
+  },
+  body: JSON.stringify(body)
+})
+
+const r = await fetch(GROQ_URL, {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${GROQ_KEY}`,
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify(body),
+})
+
+// 👇 ADD THIS RIGHT HERE
+if (!r.ok) {
+  const txt = await r.text()
+  console.error("Groq error details:", r.status, txt)
+  return res.status(500).json({
+    error: "Groq request failed",
+    status: r.status,
+    detail: txt
+  })
+}
+
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
