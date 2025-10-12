@@ -22,6 +22,8 @@ export default function Home() {
   const [generatedSummary, setGeneratedSummary] = useState<string | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
   const [summaries, setSummaries] = useState<any[]>([])
+  // rating hover state for the generated summary preview
+  const [hoverRating, setHoverRating] = useState<number>(0)
 
   // Voice state
   const [isRecording, setIsRecording] = useState(false)
@@ -130,15 +132,17 @@ export default function Home() {
       }
 
       setGeneratedSummary(payload.summary)
+      setHoverRating(0)
       setStatus('Summary ready — rate or discard below.')
     } catch (err: any) {
       console.error(err)
-      setStatus('Failed: ' + err.message)
+      setStatus('Failed: ' + (err?.message || String(err)))
     } finally {
       setIsGenerating(false)
     }
   }
 
+  // Save the generated summary only after user rates it
   async function saveRatedSummary(rating: number) {
     if (!generatedSummary) return
     try {
@@ -157,9 +161,10 @@ export default function Home() {
       if (error) throw error
       setStatus('Summary saved!')
       setGeneratedSummary(null)
+      setHoverRating(0)
       fetchSummaries()
     } catch (err: any) {
-      setStatus('Save failed: ' + err.message)
+      setStatus('Save failed: ' + (err?.message || String(err)))
     }
   }
 
@@ -284,7 +289,7 @@ export default function Home() {
                 <div className="text-sm font-semibold">Generated 24-hour summary</div>
                 <div className="text-xs text-slate-500">Read it, then rate it (1–5) to save or discard it permanently.</div>
               </div>
-              <button onClick={() => { setGeneratedSummary(null); setStatus(null) }} className="text-xs text-slate-400 underline">Dismiss</button>
+              <button onClick={() => { setGeneratedSummary(null); setStatus(null); setHoverRating(0) }} className="text-xs text-slate-400 underline">Dismiss</button>
             </div>
 
             <div className="mt-3 p-3 rounded-md bg-slate-50 text-slate-800 whitespace-pre-wrap">{generatedSummary}</div>
@@ -296,15 +301,26 @@ export default function Home() {
                   <button
                     key={n}
                     onClick={() => saveRatedSummary(n)}
+                    onMouseEnter={() => setHoverRating(n)}
+                    onMouseLeave={() => setHoverRating(0)}
+                    onFocus={() => setHoverRating(n)}
+                    onBlur={() => setHoverRating(0)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        saveRatedSummary(n)
+                      }
+                    }}
                     aria-label={`Rate ${n} star`}
-                    className="text-2xl"
+                    className="text-2xl cursor-pointer select-none"
+                    title={`${n} star`}
                   >
-                    {n <= 2 ? '☆' : '★'}
+                    {n <= hoverRating ? '★' : '☆'}
                   </button>
                 ))}
               </div>
               <button
-                onClick={() => { setGeneratedSummary(null); setStatus('Summary discarded.') }}
+                onClick={() => { setGeneratedSummary(null); setStatus('Summary discarded.'); setHoverRating(0) }}
                 className="ml-auto px-3 py-1 border rounded-md text-sm text-slate-600 bg-white"
               >
                 Discard
@@ -358,6 +374,7 @@ export default function Home() {
   )
 }
 
+// helper to render saved ratings
 function renderStars(r: number | null | undefined) {
   const rating = Math.max(0, Math.min(5, Number(r || 0)))
   let out = ''
