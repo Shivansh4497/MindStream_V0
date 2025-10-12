@@ -9,6 +9,26 @@ declare global {
   }
 }
 
+type SummaryRow = {
+  id: string
+  user_id?: string
+  summary_text: string
+  rating?: number
+  for_date?: string
+  created_at?: string
+}
+
+// Small helper: showing toasts
+function Toast({ text, kind = 'info' }: { text: string; kind?: 'info' | 'success' | 'error' }) {
+  const bg =
+    kind === 'success' ? 'bg-teal-600' : kind === 'error' ? 'bg-rose-600' : 'bg-slate-700'
+  return (
+    <div className={`text-white ${bg} px-3 py-2 rounded-md shadow-md text-sm`}>
+      {text}
+    </div>
+  )
+}
+
 export default function Home() {
   // Auth & UI state
   const [user, setUser] = useState<{ id: string; email?: string } | null>(null)
@@ -20,9 +40,12 @@ export default function Home() {
 
   // Summaries
   const [generatedSummary, setGeneratedSummary] = useState<string | null>(null)
+  const [generatedAt, setGeneratedAt] = useState<string | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
-  const [summaries, setSummaries] = useState<any[]>([])
+  const [summaries, setSummaries] = useState<SummaryRow[]>([])
   const [isSavingRating, setIsSavingRating] = useState(false)
+  const [toast, setToast] = useState<{ text: string; kind?: 'info' | 'success' | 'error' } | null>(null)
+
   // rating hover state for generated summary preview
   const [hoverRating, setHoverRating] = useState<number>(0)
 
@@ -32,8 +55,16 @@ export default function Home() {
   const [interim, setInterim] = useState('')
   const [finalText, setFinalText] = useState('')
   const recogRef = useRef<any>(null)
-  const safetyTimeoutRef = useRef<number | null>(null)
   const holdingRef = useRef(false)
+
+  // layout refs
+  const summariesRef = useRef<HTMLElement | null>(null)
+
+  // ---------------- Toast util ----------------
+  function showToast(text: string, kind: 'info' | 'success' | 'error' = 'info', ms = 2200) {
+    setToast({ text, kind })
+    window.setTimeout(() => setToast(null), ms)
+  }
 
   // Load auth + data
   useEffect(() => {
@@ -80,17 +111,26 @@ export default function Home() {
       .from('entries')
       .select('id, content, source, created_at')
       .order('created_at', { ascending: false })
-      .limit(100)
+      .limit(200)
     if (!error) setEntries(data || [])
   }
 
   const saveTextEntry = async (text: string, source = 'text') => {
     const { data: u } = await supabase.auth.getUser()
     const uid = u?.user?.id
-    if (!uid) return setStatus('Please sign in to save.')
+    if (!uid) {
+      setStatus('Please sign in to save.')
+      showToast('Please sign in to save an entry.', 'info')
+      return
+    }
     const { error } = await supabase.from('entries').insert([{ content: text, source, user_id: uid }])
-    if (error) return setStatus('Save failed: ' + error.message)
+    if (error) {
+      setStatus('Save failed: ' + error.message)
+      showToast('Save failed: ' + error.message, 'error')
+      return
+    }
     setStatus('Saved!')
+    showToast('Saved entry', 'success')
     fetchEntries()
   }
 
@@ -98,7 +138,7 @@ export default function Home() {
   const fetchSummaries = async () => {
     const { data, error } = await supabase
       .from('summaries')
-      .select('id, summary_text, created_at, rating, range_start, range_end')
+      .select('id, summary_text, created_at, rating, for_date')
       .order('created_at', { ascending: false })
     if (!error) setSummaries(data || [])
   }
@@ -117,10 +157,11 @@ export default function Home() {
       if (error) throw error
       if (!entries24?.length) {
         setStatus('No entries in the past 24 hours.')
+        showToast('No entries in the past 24 hours', 'info')
         return
       }
 
-      setStatus('Generating summary — please wait...')
+      setStatus('Generating reflection — please wait...')
       const resp = await fetch('/api/generate-summary', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -129,73 +170,78 @@ export default function Home() {
       const payload = await resp.json()
       if (!resp.ok) {
         setStatus('Summary generation failed: ' + (payload?.error || JSON.stringify(payload)))
+        showToast('Couldn’t generate reflection right now.', 'error')
         return
       }
 
       setGeneratedSummary(payload.summary)
-      setHoverRating(0)
-      setStatus('Summary generated — rate to save or discard.')
+      setGeneratedAt(new Date().toISOString())
+      setStatus('Reflection ready — rate or discard below.')
+      showToast('Reflection ready', 'success', 1500)
     } catch (err: any) {
       console.error(err)
       setStatus('Failed: ' + (err?.message || String(err)))
+      showToast('Couldn’t generate reflection right now : try again soon.', 'error', 3000)
     } finally {
       setIsGenerating(false)
     }
   }
 
-  // Save the generated summary only after user rates it
-  // Updated: use .insert(...).select() to get the inserted row back and prepend it to UI immediately.
+  // Save the generated summary only after user rates it.
   async function saveRatedSummary(rating: number) {
     if (!generatedSummary) return
     try {
       setIsSavingRating(true)
-      setStatus('Saving summary...')
+      setStatus('Saving reflection...')
       const { data: u } = await supabase.auth.getUser()
       const uid = u?.user?.id
       if (!uid) {
         setStatus('Please sign in to save the summary.')
+        showToast('Please sign in to save the reflection.', 'info')
         setIsSavingRating(false)
         return
       }
       const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
       const upto = new Date().toISOString()
+      const todayIso = new Date().toISOString().slice(0, 10)
 
-      // Request DB insert and return the inserted row
+      // Insert & request the inserted row back
       const insertResp = await supabase
         .from('summaries')
         .insert([{
           user_id: uid,
           range_start: since,
           range_end: upto,
+          for_date: todayIso,
           summary_text: generatedSummary,
           rating
         }])
         .select('*')
       const { data: inserted, error } = insertResp as any
-
       if (error) throw error
-      // inserted is an array with the new row(s)
       const newRow = Array.isArray(inserted) && inserted.length ? inserted[0] : null
       if (newRow) {
-        // Prepend to UI list so user sees it immediately
         setSummaries((prev) => [newRow, ...prev])
       } else {
-        // Fallback: refetch
         fetchSummaries()
       }
 
-      setStatus('Summary saved!')
-      // clear generated summary (removes card)
+      setStatus('Reflection saved!')
+      showToast('Reflection saved — you captured another piece of your day.', 'success', 2600)
       setGeneratedSummary(null)
+      setGeneratedAt(null)
       setHoverRating(0)
-      // scroll to summaries so user sees their saved summary
+
+      // smooth scroll to summaries
       setTimeout(() => {
         const el = document.getElementById('your-summaries-section')
         if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      }, 200)
+      }, 250)
     } catch (err: any) {
       console.error('saveRatedSummary error', err)
-      setStatus('Could not save summary: ' + (err?.message || String(err)))
+      const msg = err?.message || String(err) || 'Unknown error'
+      setStatus('Could not save reflection: ' + msg)
+      showToast('Could not save reflection: ' + msg, 'error', 3500)
     } finally {
       setIsSavingRating(false)
     }
@@ -223,7 +269,7 @@ export default function Home() {
       }
       if (interimT) setInterim(interimT)
       if (finalT) {
-        setFinalText((s) => (s ? s + ' ' + finalT : finalText))
+        setFinalText((s) => (s ? s + ' ' + finalT : finalT))
         setInterim('')
       }
     }
@@ -231,6 +277,7 @@ export default function Home() {
     r.onerror = (e: any) => {
       console.error('SpeechRecognition error', e)
       setStatus('Recognition error: ' + e.error)
+      showToast('Recognition error: ' + e.error, 'error')
       setIsRecording(false)
     }
 
@@ -254,6 +301,7 @@ export default function Home() {
       setStatus('Recording...')
     } catch (err: any) {
       setStatus('Mic error: ' + err.message)
+      showToast('Mic error: ' + err.message, 'error')
     }
   }
 
@@ -271,15 +319,22 @@ export default function Home() {
 
   // ---------------- UI ----------------
   return (
-    <main className="min-h-screen bg-gradient-to-b from-indigo-50 to-white flex justify-center p-8">
-      <div className="w-full max-w-2xl">
-        <header className="mb-6">
-          <h1 className="text-3xl font-semibold text-indigo-900">Mindstream</h1>
-          <p className="text-sm text-slate-600">Your thoughts. Finally understood.</p>
+    <div className="min-h-screen bg-gradient-to-b from-indigo-50 to-white p-8">
+      {/* Toast container */}
+      <div className="fixed top-6 right-6 z-50">
+        {toast && <Toast text={toast.text} kind={toast.kind} />}
+      </div>
+
+      <main className="mx-auto w-full max-w-3xl">
+        {/* Header */}
+        <header className="mb-10">
+          <h1 className="text-4xl font-bold text-indigo-900 leading-tight">Mindstream</h1>
+          <p className="mt-2 text-sm text-slate-600">Your thoughts. Finally understood.</p>
         </header>
 
-        <div className="mb-4 p-4 rounded-lg border bg-white shadow-sm flex items-center justify-between">
-          <div>
+        {/* Privacy + Auth */}
+        <div className="mb-6 rounded-lg border bg-white/60 p-4 shadow-sm flex items-center justify-between">
+          <div className="text-sm text-slate-700">
             <strong>Privacy:</strong> Voice is processed by your browser’s speech service; audio isn’t stored.
           </div>
           <div className="flex items-center gap-3">
@@ -298,66 +353,90 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Text + Generate Summary */}
-        <div className="mb-6">
-          <div className="flex gap-2 mb-3">
-            <input value={finalText} onChange={(e) => setFinalText(e.target.value)} className="flex-1 rounded-md border px-3 py-2 shadow-sm" placeholder="What’s on your mind?" />
-            <button onClick={() => saveTextEntry(finalText)} className="rounded-md bg-indigo-700 text-white px-4 py-2">Save</button>
+        {/* Input row */}
+        <div className="mb-8">
+          <div className="flex gap-3 items-start">
+            <input
+              value={finalText}
+              onChange={(e) => setFinalText(e.target.value)}
+              className="flex-1 rounded-md border px-4 py-3 shadow-sm text-[15px] leading-relaxed"
+              placeholder="What’s on your mind?"
+            />
+            <div className="flex flex-col gap-2">
+              <button onClick={() => saveTextEntry(finalText)} className="rounded-md bg-indigo-700 text-white px-4 py-2">Save</button>
+              <button
+                onMouseDown={startRecording}
+                onMouseUp={stopRecording}
+                onTouchStart={startRecording}
+                onTouchEnd={stopRecording}
+                className={`rounded-md px-4 py-2 ${isRecording ? 'bg-teal-400 text-white' : 'bg-white border'}`}
+                title="Hold to record"
+              >
+                {isRecording ? 'Recording…' : 'Hold to record'}
+              </button>
+            </div>
           </div>
 
-          <div className="flex items-center justify-between">
+          <div className="mt-4 flex items-center justify-between">
             <div className="text-xs text-slate-500">Daily Reflection — 24-hour summary</div>
-            <button onClick={generate24hSummary} disabled={isGenerating} className="rounded-md bg-indigo-600 text-white px-3 py-1 text-sm">
-              {isGenerating ? 'Generating...' : 'Generate Summary'}
+            <button
+              onClick={generate24hSummary}
+              disabled={isGenerating}
+              className="rounded-md bg-indigo-600 text-white px-3 py-1 text-sm transition-all hover:scale-[1.02]"
+            >
+              {isGenerating ? 'Reflecting…' : 'Reflect on your day'}
             </button>
           </div>
-          <div className="text-xs text-slate-500 mt-2">Generate a motivational daily summary from your entries, then rate or discard it. Rating saves the summary to your "Your Summaries" list.</div>
+          <div className="text-xs text-slate-500 mt-2">Generate a motivational reflection from your entries, then rate or discard.</div>
         </div>
 
         {/* Generated Summary Card */}
         {generatedSummary && (
-          <div className="mb-6 rounded-lg border bg-white p-4 shadow-sm">
+          <div className="mb-8 rounded-lg border bg-gradient-to-b from-indigo-50/60 to-white p-4 shadow-md transition-opacity duration-300 ease-out animate-[fadein_250ms]">
             <div className="flex items-start justify-between">
               <div>
-                <div className="text-sm font-semibold">Generated 24-hour summary</div>
-                <div className="text-xs text-slate-500">Read it, then rate it (1–5) to save. If you don't like it, discard it — it won't be saved.</div>
+                <div className="text-sm font-semibold text-indigo-800">✨ Reflection generated {generatedAt ? `— ${new Date(generatedAt).toLocaleTimeString()}` : ''}</div>
+                <div className="text-xs text-slate-500">Read it, then rate (1–5) to save — or discard it permanently.</div>
               </div>
-              <button onClick={() => { setGeneratedSummary(null); setStatus(null); setHoverRating(0) }} className="text-xs text-slate-400 underline">Dismiss</button>
+              <button onClick={() => { setGeneratedSummary(null); setGeneratedAt(null); setStatus(null); }} className="text-xs text-slate-400 underline">Dismiss</button>
             </div>
 
-            <div className="mt-3 p-3 rounded-md bg-slate-50 text-slate-800 whitespace-pre-wrap">{generatedSummary}</div>
+            <div className="mt-3 p-4 rounded-md bg-white/80 text-slate-800 whitespace-pre-wrap leading-relaxed">
+              <div dangerouslySetInnerHTML={{ __html: markDownLike(generatedSummary) }} />
+            </div>
 
-            <div className="mt-3 flex flex-wrap items-center gap-3">
-              <div className="text-sm text-slate-600">Rate this summary (click a star to save):</div>
+            <div className="mt-3 flex items-center gap-3">
+              <div className="text-sm text-slate-600">Rate this reflection (click a star to save):</div>
 
               <div className="flex items-center gap-2">
-                {[1,2,3,4,5].map((n) => (
-                  <button
-                    key={n}
-                    onClick={() => saveRatedSummary(n)}
-                    onMouseEnter={() => setHoverRating(n)}
-                    onMouseLeave={() => setHoverRating(0)}
-                    onFocus={() => setHoverRating(n)}
-                    onBlur={() => setHoverRating(0)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault()
-                        saveRatedSummary(n)
-                      }
-                    }}
-                    aria-label={`Rate ${n} star`}
-                    className="text-2xl cursor-pointer select-none"
-                    title={`${n} star`}
-                    disabled={isSavingRating}
-                    style={{ opacity: isSavingRating ? 0.5 : 1 }}
-                  >
-                    {n <= hoverRating ? '★' : '☆'}
-                  </button>
-                ))}
+                {[1,2,3,4,5].map((n) => {
+                  const filled = n <= hoverRating
+                  return (
+                    <button
+                      key={n}
+                      onClick={() => saveRatedSummary(n)}
+                      onMouseEnter={() => setHoverRating(n)}
+                      onMouseLeave={() => setHoverRating(0)}
+                      onFocus={() => setHoverRating(n)}
+                      onBlur={() => setHoverRating(0)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          saveRatedSummary(n)
+                        }
+                      }}
+                      aria-label={`Rate ${n} star`}
+                      className={`text-2xl cursor-pointer select-none transition-transform ${filled ? 'text-yellow-500 scale-100' : 'text-slate-300'} ${isSavingRating ? 'opacity-50 pointer-events-none' : ''}`}
+                      title={`${n} star`}
+                    >
+                      {filled ? '★' : '☆'}
+                    </button>
+                  )
+                })}
               </div>
 
               <button
-                onClick={() => { setGeneratedSummary(null); setStatus('Summary discarded.'); setHoverRating(0) }}
+                onClick={() => { setGeneratedSummary(null); setGeneratedAt(null); setStatus('Reflection discarded.'); showToast('Reflection discarded', 'info') }}
                 className="ml-auto px-3 py-1 border rounded-md text-sm text-slate-600 bg-white"
                 disabled={isSavingRating}
               >
@@ -367,11 +446,11 @@ export default function Home() {
           </div>
         )}
 
-        {/* Entries */}
-        <section className="space-y-4 mb-8">
+        {/* Entries (Today’s Thoughts) */}
+        <section className="space-y-4 mb-12">
           <div className="text-sm text-slate-500">Your Reflections</div>
           <div className="rounded-lg bg-white p-4 border shadow-sm">
-            {entries.length === 0 && <div className="text-slate-700">No entries yet.</div>}
+            {entries.length === 0 && <div className="text-slate-700">Your thoughts will appear here once you start speaking or typing.</div>}
             {entries.length > 0 && (
               <ul className="space-y-3">
                 {entries.map((e) => (
@@ -386,19 +465,16 @@ export default function Home() {
         </section>
 
         {/* Summaries */}
-        <section id="your-summaries-section" className="space-y-4">
+        <section id="your-summaries-section" ref={summariesRef as any} className="space-y-4 mb-16">
           <div className="text-sm text-slate-500">Your Summaries</div>
           <div className="rounded-lg bg-white p-4 border shadow-sm">
             {summaries.length === 0 && <div className="text-slate-700">No summaries yet — generate one above.</div>}
             {summaries.length > 0 && (
               <ul className="space-y-3">
-                {summaries.map((s: any) => (
-                  <li key={s.id} className="p-3 border rounded-md bg-white flex justify-between items-start">
-                    <div className="flex-1 pr-4">
-                      <div className="text-slate-800 whitespace-pre-wrap">{s.summary_text}</div>
-                      <div className="mt-2 text-xs text-slate-400">{new Date(s.created_at).toLocaleString()}</div>
-                    </div>
-                    <div className="text-lg text-yellow-500">{renderStars(s.rating)}</div>
+                {summaries.map((s: SummaryRow) => (
+                  <li key={s.id} className="p-4 border rounded-md bg-white flex justify-between items-start">
+                    <div className="flex-1 pr-4 leading-relaxed text-slate-800" dangerouslySetInnerHTML={{ __html: markDownLike(s.summary_text) }} />
+                    <div className="text-lg text-yellow-500 mt-1">{renderStars(s.rating)}</div>
                   </li>
                 ))}
               </ul>
@@ -407,9 +483,20 @@ export default function Home() {
         </section>
 
         {status && <div className="mt-6 text-sm text-slate-600">{status}</div>}
-      </div>
-    </main>
+        <footer className="mt-8 text-xs text-slate-400">Private • Encrypted • Yours</footer>
+      </main>
+    </div>
   )
+}
+
+// Helper: lightweight "markdown-like" conversion for bold lines like **Headline**
+function markDownLike(text: string) {
+  // convert **bold** into bold-ish HTML with a subtle indigo color for headers
+  let out = text
+    .replace(/\*\*(.*?)\*\*/g, '<strong style="color:#3b82f6">$1</strong>')
+    .replace(/\n\n/g, '<br/><br/>')
+  // ensure safe fallback (we assume content is generated by AI or user; keep simple)
+  return out
 }
 
 // helper to render saved ratings
