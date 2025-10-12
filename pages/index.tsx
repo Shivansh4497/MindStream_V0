@@ -144,6 +144,7 @@ export default function Home() {
   }
 
   // Save the generated summary only after user rates it
+  // Updated: use .insert(...).select() to get the inserted row back and prepend it to UI immediately.
   async function saveRatedSummary(rating: number) {
     if (!generatedSummary) return
     try {
@@ -159,19 +160,39 @@ export default function Home() {
       const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
       const upto = new Date().toISOString()
 
-      const { error } = await supabase.from('summaries').insert([{
-        user_id: uid,
-        range_start: since,
-        range_end: upto,
-        summary_text: generatedSummary,
-        rating
-      }])
+      // Request DB insert and return the inserted row
+      const insertResp = await supabase
+        .from('summaries')
+        .insert([{
+          user_id: uid,
+          range_start: since,
+          range_end: upto,
+          summary_text: generatedSummary,
+          rating
+        }])
+        .select('*')
+      const { data: inserted, error } = insertResp as any
+
       if (error) throw error
+      // inserted is an array with the new row(s)
+      const newRow = Array.isArray(inserted) && inserted.length ? inserted[0] : null
+      if (newRow) {
+        // Prepend to UI list so user sees it immediately
+        setSummaries((prev) => [newRow, ...prev])
+      } else {
+        // Fallback: refetch
+        fetchSummaries()
+      }
 
       setStatus('Summary saved!')
+      // clear generated summary (removes card)
       setGeneratedSummary(null)
       setHoverRating(0)
-      fetchSummaries()
+      // scroll to summaries so user sees their saved summary
+      setTimeout(() => {
+        const el = document.getElementById('your-summaries-section')
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }, 200)
     } catch (err: any) {
       console.error('saveRatedSummary error', err)
       setStatus('Could not save summary: ' + (err?.message || String(err)))
@@ -202,7 +223,7 @@ export default function Home() {
       }
       if (interimT) setInterim(interimT)
       if (finalT) {
-        setFinalText((s) => (s ? s + ' ' + finalT : finalT))
+        setFinalText((s) => (s ? s + ' ' + finalT : finalText))
         setInterim('')
       }
     }
@@ -365,7 +386,7 @@ export default function Home() {
         </section>
 
         {/* Summaries */}
-        <section className="space-y-4">
+        <section id="your-summaries-section" className="space-y-4">
           <div className="text-sm text-slate-500">Your Summaries</div>
           <div className="rounded-lg bg-white p-4 border shadow-sm">
             {summaries.length === 0 && <div className="text-slate-700">No summaries yet — generate one above.</div>}
