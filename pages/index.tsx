@@ -4,6 +4,8 @@ import { supabase } from '../lib/supabaseClient'
 import Header from '../components/Header'
 import EntryInput from '../components/EntryInput'
 import ToastContainer from '../components/ToastContainer'
+import SummaryCard from '../components/SummaryCard'
+
 
 import {
   previewText as previewTextUtil,
@@ -574,48 +576,21 @@ export default function Home() {
 
         {/* Generated Summary (preview -> rate) */}
         {generatedSummary && (
-          <div className="mb-8 rounded-lg border bg-gradient-to-b from-indigo-50/60 to-white p-4 shadow-md transition-opacity duration-300 ease-out">
-            <div className="flex items-start justify-between">
-              <div>
-                <div className="text-sm font-semibold text-indigo-800">✨ Reflection generated {generatedAt ? `— ${new Date(generatedAt).toLocaleTimeString()}` : ''}</div>
-                <div className="text-xs text-slate-500">Read it, then rate (1–5) to save — or discard it permanently.</div>
-              </div>
-              <button onClick={() => { setGeneratedSummary(null); setGeneratedAt(null); setStatus(null); }} className="text-xs text-slate-400 underline">Dismiss</button>
-            </div>
-
-            <div className="mt-3 p-4 rounded-md bg-white/80 text-slate-800 whitespace-pre-wrap leading-relaxed">
-              <div dangerouslySetInnerHTML={{ __html: markDownLike(generatedSummary) }} />
-            </div>
-
-            <div className="mt-3 flex items-center gap-3">
-              <div className="text-sm text-slate-600">Rate this reflection (click a star to save):</div>
-
-              <div className="flex items-center gap-2">
-                {[1, 2, 3, 4, 5].map((n) => {
-                  const filled = n <= hoverRating
-                  return (
-                    <button
-                      key={n}
-                      onClick={() => saveRatedSummary(n)}
-                      onMouseEnter={() => setHoverRating(n)}
-                      onMouseLeave={() => setHoverRating(0)}
-                      onFocus={() => setHoverRating(n)}
-                      onBlur={() => setHoverRating(0)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault()
-                          saveRatedSummary(n)
-                        }
-                      }}
-                      aria-label={`Rate ${n} star`}
-                      className={`text-2xl cursor-pointer select-none transition-transform ${filled ? 'text-yellow-500 scale-100' : 'text-slate-300'} ${isSavingRating ? 'opacity-50 pointer-events-none' : ''}`}
-                      title={`${n} star`}
-                    >
-                      {filled ? '★' : '☆'}
-                    </button>
-                  )
-                })}
-              </div>
+          <SummaryCard
+            summary={generatedSummary}
+            generatedAt={generatedAt}
+            isSavingRating={isSavingRating}
+            hoverRating={hoverRating}
+            setHoverRating={setHoverRating}
+            saveRatedSummary={saveRatedSummary}
+            discardSummary={() => {
+              setGeneratedSummary(null)
+              setGeneratedAt(null)
+              setStatus('Reflection discarded.')
+              showToast('Reflection discarded', 'info')
+            }}
+          />
+        )}
 
               <button
                 onClick={() => { setGeneratedSummary(null); setGeneratedAt(null); setStatus('Reflection discarded.'); showToast('Reflection discarded', 'info') }}
