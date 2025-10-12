@@ -592,16 +592,6 @@ export default function Home() {
           />
         )}
 
-              <button
-                onClick={() => { setGeneratedSummary(null); setGeneratedAt(null); setStatus('Reflection discarded.'); showToast('Reflection discarded', 'info') }}
-                className="ml-auto px-3 py-1 border rounded-md text-sm text-slate-600 bg-white"
-                disabled={isSavingRating}
-              >
-                Discard
-              </button>
-            </div>
-          </div>
-        )}
 
         {/* Entries list */}
         <section className="space-y-4 mb-12">
