@@ -1,6 +1,15 @@
 // pages/index.tsx
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
+import Header from '../components/Header'
+import EntryInput from '../components/EntryInput'
+import {
+  previewText as previewTextUtil,
+  markDownLike as markDownLikeUtil,
+  formatDateForGroup as formatDateForGroupUtil,
+  renderStarsInline as renderStarsInlineUtil,
+  randomAffirmation
+} from '../lib/ui'
 
 declare global {
   interface Window {
@@ -8,15 +17,6 @@ declare global {
     SpeechRecognition?: any
   }
 }
-
-/**
- * Mindstream — pages/index.tsx
- * - Voice capture (hold-to-record) => edit => save
- * - Generate 24h AI summary => rate/save/discard
- * - Summaries: grouped, collapsed preview -> expand
- * - Delete icon for entries + summaries with confirm modal
- * - Persist expanded summary id in localStorage
- */
 
 /* ---------------- Types ---------------- */
 type EntryRow = {
@@ -38,47 +38,16 @@ type SummaryRow = {
   range_end?: string
 }
 
-/* ---------------- UI helpers ---------------- */
+/* ---------------- UI helpers (reused names for compatibility) ---------------- */
+const previewText = previewTextUtil
+const markDownLike = markDownLikeUtil
+const formatDateForGroup = formatDateForGroupUtil
+const renderStarsInline = renderStarsInlineUtil
+
+/* ---------------- Toast (simple) ---------------- */
 function Toast({ text, kind = 'info' }: { text: string; kind?: 'info' | 'success' | 'error' }) {
   const bg = kind === 'success' ? 'bg-teal-600' : kind === 'error' ? 'bg-rose-600' : 'bg-slate-700'
   return <div className={`text-white ${bg} px-3 py-2 rounded-md shadow-md text-sm`}>{text}</div>
-}
-
-function renderStarsInline(r?: number | null) {
-  const rating = Math.max(0, Math.min(5, Number(r || 0)))
-  return (
-    <span title={`${rating} / 5`} aria-hidden>
-      {Array.from({ length: 5 }).map((_, i) => (i < rating ? '★' : '☆')).join('')}
-    </span>
-  )
-}
-
-function previewText(s = '', max = 220) {
-  const t = s.replace(/\s+/g, ' ').trim()
-  if (t.length <= max) return t
-  const cut = t.slice(0, max)
-  const lastSpace = cut.lastIndexOf(' ')
-  return (lastSpace > 40 ? cut.slice(0, lastSpace) : cut) + '…'
-}
-
-function markDownLike(text = '') {
-  return text.replace(/\*\*(.*?)\*\*/g, '<strong style="color:#2563eb">$1</strong>').replace(/\n\n/g, '<br/><br/>')
-}
-
-function formatDateForGroup(s?: string) {
-  if (!s) return 'Unknown'
-  const d = new Date(s)
-  const today = new Date()
-  if (d.getFullYear() === today.getFullYear() && d.getMonth() === today.getMonth() && d.getDate() === today.getDate())
-    return 'Today'
-  const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000)
-  if (
-    d.getFullYear() === yesterday.getFullYear() &&
-    d.getMonth() === yesterday.getMonth() &&
-    d.getDate() === yesterday.getDate()
-  )
-    return 'Yesterday'
-  return d.toLocaleDateString()
 }
 
 /* ---------------- Confirm Modal (inline) ---------------- */
@@ -107,7 +76,9 @@ function ConfirmModal({
         <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
         {description && <p className="mt-2 text-sm text-slate-600">{description}</p>}
         <div className="mt-4 flex justify-end gap-3">
-          <button onClick={onCancel} className="px-3 py-1 border rounded-md text-sm"> {cancelLabel} </button>
+          <button onClick={onCancel} className="px-3 py-1 border rounded-md text-sm">
+            {cancelLabel}
+          </button>
           <button
             onClick={() => onConfirm()}
             className="px-3 py-1 bg-rose-600 text-white rounded-md text-sm"
@@ -259,7 +230,7 @@ export default function Home() {
       if (error) throw error
 
       setFinalText('')
-      showToast('Saved entry', 'success')
+      showToast(randomAffirmation(), 'success', 2800)
       await fetchEntries()
     } catch (err: any) {
       console.error('saveTextEntry', err)
@@ -564,112 +535,30 @@ export default function Home() {
       />
 
       <main className="mx-auto w-full max-w-3xl">
-        {/* Header */}
-        <header className="mb-10">
-          <h1 className="text-4xl font-bold text-indigo-900 leading-tight">Mindstream</h1>
-          <p className="mt-2 text-sm text-slate-600">Your thoughts. Finally understood.</p>
-        </header>
+        {/* Header (componentized) */}
+        <Header
+          user={user}
+          email={email}
+          setEmail={setEmail}
+          signOut={signOut}
+          sendMagicLink={sendMagicLink}
+          signInWithGoogle={signInWithGoogle}
+          // future: pass streakCount when available
+        />
 
-        {/* Privacy & auth */}
-        <div className="mb-6 rounded-lg border bg-white/60 p-4 shadow-sm flex items-center justify-between">
-          <div className="text-sm text-slate-700">
-            <strong>Privacy:</strong> Voice is processed by your browser’s speech service; audio isn’t stored.
-          </div>
-          <div className="flex items-center gap-3">
-            {user ? (
-              <>
-                <div className="text-sm text-slate-700">{user.email ?? user.id.slice(0, 8)}</div>
-                <button onClick={signOut} className="text-sm underline">Sign out</button>
-              </>
-            ) : (
-              <div className="flex items-center gap-2">
-                <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" className="rounded-md border px-2 py-1 text-sm" />
-                <button onClick={sendMagicLink} className="rounded-md bg-indigo-600 text-white px-3 py-1 text-sm">Magic link</button>
-                <button onClick={signInWithGoogle} className="rounded-md border px-3 py-1 text-sm">Google</button>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Input & recording */}
-        <div className="mb-8">
-          <div className="flex gap-3 items-start">
-            {finalText ? (
-              <textarea
-                value={finalText}
-                onChange={(e) => setFinalText(e.target.value)}
-                rows={4}
-                className="flex-1 rounded-md border px-4 py-3 shadow-sm text-[15px]"
-                placeholder="Edit transcription before saving..."
-                aria-label="Edit transcription"
-              />
-            ) : (
-              <input
-                value={finalText}
-                onChange={(e) => setFinalText(e.target.value)}
-                className="flex-1 rounded-md border px-4 py-3 shadow-sm text-[15px]"
-                placeholder="What’s on your mind?"
-                aria-label="Quick thought input"
-              />
-            )}
-
-            <div className="flex flex-col gap-2">
-              <button
-                onClick={() => saveTextEntry(finalText)}
-                disabled={!finalText.trim()}
-                className="rounded-md bg-indigo-700 text-white px-4 py-2 disabled:opacity-50"
-              >
-                Save
-              </button>
-
-              <button
-                onMouseDown={startRecording}
-                onMouseUp={stopRecording}
-                onTouchStart={startRecording}
-                onTouchEnd={stopRecording}
-                className={`rounded-md px-4 py-2 ${isRecording ? 'bg-teal-400 text-white' : 'bg-white border'}`}
-                title="Hold to record"
-                aria-pressed={isRecording}
-              >
-                {isRecording ? 'Recording…' : 'Hold to record'}
-              </button>
-            </div>
-          </div>
-
-          {finalText && (
-            <div className="mt-3 flex justify-between items-center">
-              <div className="text-xs text-slate-500">Edit transcription, then click Save or Cancel.</div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => {
-                    setFinalText('')
-                    setStatus('Transcription discarded.')
-                    showToast('Transcription discarded', 'info')
-                  }}
-                  className="px-3 py-1 border rounded-md text-sm text-slate-600 bg-white"
-                >
-                  Cancel
-                </button>
-                <button onClick={() => saveTextEntry(finalText)} className="px-3 py-1 bg-indigo-600 text-white rounded-md text-sm">
-                  Save transcription
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Generate Summary */}
-          <div className="mt-6 flex items-center justify-between">
-            <div className="text-xs text-slate-500">Daily Reflection — 24-hour summary</div>
-            <button
-              onClick={generate24hSummary}
-              disabled={isGenerating}
-              className="rounded-md bg-indigo-600 text-white px-3 py-1 text-sm transition-all hover:scale-[1.02]"
-            >
-              {isGenerating ? 'Reflecting…' : 'Reflect on your day'}
-            </button>
-          </div>
-          <p className="mt-2 text-xs text-slate-500">Generate a motivational reflection from your entries, then rate or discard.</p>
-        </div>
+        {/* Input & recording (componentized) */}
+        <EntryInput
+          finalText={finalText}
+          setFinalText={setFinalText}
+          interim={interim}
+          isRecording={isRecording}
+          startRecording={startRecording}
+          stopRecording={stopRecording}
+          saveTextEntry={saveTextEntry}
+          status={status}
+          setStatus={setStatus}
+          showToast={showToast}
+        />
 
         {/* Generated Summary (preview -> rate) */}
         {generatedSummary && (
@@ -778,7 +667,7 @@ export default function Home() {
                             <div className="text-sm text-slate-800 leading-snug line-clamp-4">{preview}</div>
                             <div className="mt-2 text-xs text-slate-400 flex items-center gap-3">
                               <span>{s.for_date ?? (s.created_at ? new Date(s.created_at).toLocaleDateString() : '')}</span>
-                              <span className="text-yellow-500">{renderStarsInline(s.rating)}</span>
+                              <span className="text-yellow-500" dangerouslySetInnerHTML={{ __html: renderStarsInline(s.rating) }} />
                               <span className="text-slate-400">·</span>
                               <span className="text-slate-500 text-xs"> {s.summary_text?.length ?? 0} chars</span>
                             </div>
@@ -829,7 +718,7 @@ export default function Home() {
 
                           <div className="mt-3 flex items-center justify-between">
                             <div className="text-xs text-slate-400">Saved {s.for_date ?? (s.created_at ? new Date(s.created_at).toLocaleString() : '')}</div>
-                            <div className="text-sm text-slate-600">Your rating: <span className="text-yellow-500">{renderStarsInline(s.rating)}</span></div>
+                            <div className="text-sm text-slate-600">Your rating: <span className="text-yellow-500" dangerouslySetInnerHTML={{ __html: renderStarsInline(s.rating) }} /></div>
                           </div>
                         </div>
                       </li>
