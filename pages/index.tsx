@@ -9,10 +9,21 @@ declare global {
   }
 }
 
+/**
+ * Mindstream — pages/index.tsx
+ * - Voice capture (hold-to-record) => edit => save
+ * - Generate 24h AI summary => rate/save/discard
+ * - Summaries: grouped, collapsed preview -> expand
+ * - Delete icon for entries + summaries with confirm modal
+ * - Persist expanded summary id in localStorage
+ */
+
+/* ---------------- Types ---------------- */
 type EntryRow = {
   id: string
   content: string
   source?: string
+  user_id?: string
   created_at?: string
 }
 
@@ -27,7 +38,7 @@ type SummaryRow = {
   range_end?: string
 }
 
-// ----------------------- small UI helpers -----------------------
+/* ---------------- UI helpers ---------------- */
 function Toast({ text, kind = 'info' }: { text: string; kind?: 'info' | 'success' | 'error' }) {
   const bg = kind === 'success' ? 'bg-teal-600' : kind === 'error' ? 'bg-rose-600' : 'bg-slate-700'
   return <div className={`text-white ${bg} px-3 py-2 rounded-md shadow-md text-sm`}>{text}</div>
@@ -58,51 +69,85 @@ function formatDateForGroup(s?: string) {
   if (!s) return 'Unknown'
   const d = new Date(s)
   const today = new Date()
-  if (
-    d.getFullYear() === today.getFullYear() &&
-    d.getMonth() === today.getMonth() &&
-    d.getDate() === today.getDate()
-  ) {
+  if (d.getFullYear() === today.getFullYear() && d.getMonth() === today.getMonth() && d.getDate() === today.getDate())
     return 'Today'
-  }
   const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000)
   if (
     d.getFullYear() === yesterday.getFullYear() &&
     d.getMonth() === yesterday.getMonth() &&
     d.getDate() === yesterday.getDate()
-  ) {
+  )
     return 'Yesterday'
-  }
   return d.toLocaleDateString()
 }
 
-// ----------------------- main component -----------------------
+/* ---------------- Confirm Modal (inline) ---------------- */
+function ConfirmModal({
+  open,
+  title,
+  description,
+  confirmLabel = 'Delete',
+  cancelLabel = 'Cancel',
+  onConfirm,
+  onCancel,
+}: {
+  open: boolean
+  title: string
+  description?: string
+  confirmLabel?: string
+  cancelLabel?: string
+  onConfirm: () => Promise<void> | void
+  onCancel: () => void
+}) {
+  if (!open) return null
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/40" onClick={onCancel} />
+      <div className="relative z-60 w-full max-w-md rounded-md bg-white p-6 shadow-lg">
+        <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
+        {description && <p className="mt-2 text-sm text-slate-600">{description}</p>}
+        <div className="mt-4 flex justify-end gap-3">
+          <button onClick={onCancel} className="px-3 py-1 border rounded-md text-sm"> {cancelLabel} </button>
+          <button
+            onClick={() => onConfirm()}
+            className="px-3 py-1 bg-rose-600 text-white rounded-md text-sm"
+            autoFocus
+          >
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ---------------- Main component ---------------- */
 export default function Home() {
-  // auth
+  /* Auth & status */
   const [user, setUser] = useState<{ id: string; email?: string } | null>(null)
   const [email, setEmail] = useState('')
   const [status, setStatus] = useState<string | null>(null)
   const [toast, setToast] = useState<{ text: string; kind?: 'info' | 'success' | 'error' } | null>(null)
 
-  // entries & summaries
+  /* Data */
   const [entries, setEntries] = useState<EntryRow[]>([])
   const [summaries, setSummaries] = useState<SummaryRow[]>([])
+
+  /* Generated summary & state */
   const [generatedSummary, setGeneratedSummary] = useState<string | null>(null)
   const [generatedAt, setGeneratedAt] = useState<string | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
   const [isSavingRating, setIsSavingRating] = useState(false)
 
-  // recording
+  /* Voice transcription */
   const [isRecording, setIsRecording] = useState(false)
   const [interim, setInterim] = useState('')
-  const [finalText, setFinalText] = useState('')
+  const [finalText, setFinalText] = useState('') // used for both typed text & transcript edit
   const recogRef = useRef<any>(null)
   const holdingRef = useRef(false)
 
-  // UI states
+  /* UI */
   const [hoverRating, setHoverRating] = useState<number>(0)
-
-  // expansion: persist to localStorage
   const [expandedSummaryId, setExpandedSummaryId] = useState<string | null>(() => {
     try {
       if (typeof window !== 'undefined') return localStorage.getItem('expandedSummaryId')
@@ -115,20 +160,26 @@ export default function Home() {
       else localStorage.removeItem('expandedSummaryId')
     } catch {}
   }, [expandedSummaryId])
-
-  // highlight for newly inserted item
   const [recentlyAddedId, setRecentlyAddedId] = useState<string | null>(null)
 
-  // keyboard focus refs for accessibility (optional)
+  /* Confirm modal state */
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const [confirmTitle, setConfirmTitle] = useState('')
+  const [confirmDesc, setConfirmDesc] = useState<string | undefined>(undefined)
+  const confirmActionRef = useRef<() => Promise<void> | void>(() => {})
+  // track which item (id) is pending delete (useful for optimistic UI)
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
+
+  /* refs */
   const summariesRef = useRef<HTMLDivElement | null>(null)
 
-  // ---------------- toast util ----------------
+  /* small util: showToast */
   function showToast(text: string, kind: 'info' | 'success' | 'error' = 'info', ms = 2200) {
     setToast({ text, kind })
     window.setTimeout(() => setToast(null), ms)
   }
 
-  // ---------------- auth + load ----------------
+  /* ---------------- Auth + load ---------------- */
   useEffect(() => {
     const load = async () => {
       const { data } = await supabase.auth.getUser()
@@ -146,17 +197,18 @@ export default function Home() {
     return () => sub.subscription.unsubscribe()
   }, [])
 
-  // ---------------- auth actions ----------------
   const signInWithGoogle = async () => {
     setStatus('Redirecting to Google...')
     await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } })
   }
+
   const sendMagicLink = async () => {
     if (!email.includes('@')) return setStatus('Enter a valid email.')
     setStatus('Sending magic link...')
     const { error } = await supabase.auth.signInWithOtp({ email })
     setStatus(error ? error.message : 'Magic link sent — check your inbox.')
   }
+
   const signOut = async () => {
     await supabase.auth.signOut()
     setUser(null)
@@ -166,46 +218,83 @@ export default function Home() {
     showToast('Signed out', 'info')
   }
 
-  // ---------------- entries ----------------
+  /* ---------------- Entries CRUD ---------------- */
   const fetchEntries = async () => {
-    const { data, error } = await supabase
-      .from('entries')
-      .select('id, content, source, created_at')
-      .order('created_at', { ascending: false })
-      .limit(200)
-    if (!error) setEntries(data || [])
+    try {
+      const { data: u } = await supabase.auth.getUser()
+      const uid = u?.user?.id
+      if (!uid) {
+        setEntries([])
+        return
+      }
+      const { data, error } = await supabase
+        .from('entries')
+        .select('id, content, source, created_at, user_id')
+        .eq('user_id', uid)
+        .order('created_at', { ascending: false })
+        .limit(500)
+      if (error) throw error
+      setEntries(data || [])
+    } catch (err) {
+      console.error('fetchEntries error', err)
+      setEntries([])
+    }
   }
 
   const saveTextEntry = async (text: string, source = 'text') => {
-    const { data: u } = await supabase.auth.getUser()
-    const uid = u?.user?.id
-    if (!uid) {
-      setStatus('Please sign in to save.')
-      showToast('Please sign in to save an entry.', 'info')
-      return
+    try {
+      const { data: u } = await supabase.auth.getUser()
+      const uid = u?.user?.id
+      if (!uid) {
+        showToast('Please sign in to save an entry.', 'info')
+        return
+      }
+      const trimmed = (text || '').trim()
+      if (!trimmed) {
+        showToast('Cannot save empty entry.', 'info')
+        return
+      }
+
+      const { error } = await supabase.from('entries').insert([{ content: trimmed, source, user_id: uid }])
+      if (error) throw error
+
+      setFinalText('')
+      showToast('Saved entry', 'success')
+      await fetchEntries()
+    } catch (err: any) {
+      console.error('saveTextEntry', err)
+      showToast('Save failed: ' + (err?.message || String(err)), 'error')
     }
-    if (!text || text.trim().length === 0) {
-      setStatus('Cannot save empty entry.')
-      showToast('Cannot save empty entry.', 'info')
-      return
-    }
-    const { error } = await supabase.from('entries').insert([{ content: text.trim(), source, user_id: uid }])
-    if (error) {
-      setStatus('Save failed: ' + error.message)
-      showToast('Save failed: ' + error.message, 'error')
-      return
-    }
-    setFinalText('')
-    setStatus('Saved!')
-    showToast('Saved entry', 'success')
-    fetchEntries()
   }
 
-  // ---------------- summaries fetch ----------------
+  /* delete entry with confirm modal */
+  const confirmDeleteEntry = (entryId: string) => {
+    setConfirmTitle('Delete entry')
+    setConfirmDesc('Permanently delete this entry? This action cannot be undone.')
+    confirmActionRef.current = async () => {
+      // optimistic remove from frontend
+      setPendingDeleteId(entryId)
+      setEntries((prev) => prev.filter((e) => e.id !== entryId))
+      try {
+        const { error } = await supabase.from('entries').delete().eq('id', entryId)
+        if (error) throw error
+        showToast('Entry deleted', 'info')
+      } catch (err: any) {
+        console.error('delete entry failed', err)
+        showToast('Could not delete entry: ' + (err?.message || String(err)), 'error')
+        await fetchEntries() // restore from backend
+      } finally {
+        setPendingDeleteId(null)
+      }
+    }
+    setConfirmOpen(true)
+  }
+
+  /* ---------------- Summaries CRUD ---------------- */
   const fetchSummaries = async () => {
     try {
-      const { data: userData } = await supabase.auth.getUser()
-      const uid = userData?.user?.id
+      const { data: u } = await supabase.auth.getUser()
+      const uid = u?.user?.id
       if (!uid) {
         setSummaries([])
         return
@@ -216,18 +305,14 @@ export default function Home() {
         .eq('user_id', uid)
         .order('created_at', { ascending: false })
         .limit(500)
-      if (!error) setSummaries(data || [])
-      else {
-        console.error('fetchSummaries error', error)
-        setSummaries([])
-      }
+      if (error) throw error
+      setSummaries(data || [])
     } catch (err) {
-      console.error('fetchSummaries exception', err)
+      console.error('fetchSummaries error', err)
       setSummaries([])
     }
   }
 
-  // ---------------- generate summary ----------------
   async function generate24hSummary() {
     try {
       setIsGenerating(true)
@@ -240,7 +325,6 @@ export default function Home() {
         .order('created_at', { ascending: true })
       if (error) throw error
       if (!entries24?.length) {
-        setStatus('No entries in the past 24 hours.')
         showToast('No entries in the past 24 hours', 'info')
         return
       }
@@ -253,24 +337,21 @@ export default function Home() {
       })
       const payload = await resp.json()
       if (!resp.ok) {
-        setStatus('Summary generation failed: ' + (payload?.error || JSON.stringify(payload)))
-        showToast('Couldn’t generate reflection right now.', 'error')
+        console.error('generate error payload', payload)
+        showToast('Couldn’t generate reflection right now', 'error')
         return
       }
       setGeneratedSummary(payload.summary)
       setGeneratedAt(new Date().toISOString())
-      setStatus('Reflection ready — rate or discard below.')
-      showToast('Reflection ready', 'success', 1400)
+      showToast('Reflection ready', 'success')
     } catch (err: any) {
       console.error('generate24hSummary', err)
-      setStatus('Failed: ' + (err?.message || String(err)))
-      showToast('Couldn’t generate reflection right now : try again soon.', 'error')
+      showToast('Generation failed', 'error')
     } finally {
       setIsGenerating(false)
     }
   }
 
-  // ---------------- save rated summary (ensures user_id) ----------------
   async function saveRatedSummary(rating: number) {
     if (!generatedSummary) return
     try {
@@ -283,8 +364,7 @@ export default function Home() {
         uid = (sess as any)?.session?.user?.id
       }
       if (!uid) {
-        setStatus('Please sign in to save the summary.')
-        showToast('Please sign in to save the reflection.', 'info')
+        showToast('Please sign in to save the reflection', 'info')
         setIsSavingRating(false)
         return
       }
@@ -294,14 +374,16 @@ export default function Home() {
 
       const insertResp = await supabase
         .from('summaries')
-        .insert([{
-          user_id: uid,
-          range_start: since,
-          range_end: upto,
-          for_date: todayIso,
-          summary_text: generatedSummary,
-          rating
-        }])
+        .insert([
+          {
+            user_id: uid,
+            range_start: since,
+            range_end: upto,
+            for_date: todayIso,
+            summary_text: generatedSummary,
+            rating
+          }
+        ])
         .select('*')
       const { data: inserted, error } = insertResp as any
       if (error) throw error
@@ -310,8 +392,8 @@ export default function Home() {
         setSummaries((prev) => [newRow, ...prev])
         setRecentlyAddedId(newRow.id)
         setExpandedSummaryId(newRow.id)
-        // collapse after a short moment and remove highlight
-        window.setTimeout(() => {
+        // collapse & remove highlight after a moment
+        setTimeout(() => {
           setExpandedSummaryId(null)
           setRecentlyAddedId(null)
         }, 2600)
@@ -321,44 +403,46 @@ export default function Home() {
       setGeneratedSummary(null)
       setGeneratedAt(null)
       setHoverRating(0)
-      setStatus('Reflection saved!')
-      showToast('Reflection saved — you captured another piece of your day.', 'success', 2600)
-      // scroll to summaries
-      window.setTimeout(() => {
+      showToast('Reflection saved — you captured another piece of your day.', 'success')
+      // scroll
+      setTimeout(() => {
         const el = document.getElementById('your-summaries-section')
         if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
       }, 250)
     } catch (err: any) {
       console.error('saveRatedSummary error', err)
-      const msg = err?.message || String(err)
-      setStatus('Could not save reflection: ' + msg)
-      showToast('Could not save reflection: ' + msg, 'error', 4000)
+      showToast('Could not save reflection: ' + (err?.message || String(err)), 'error')
     } finally {
       setIsSavingRating(false)
     }
   }
 
-  // ---------------- delete summary action ----------------
-  async function deleteSummary(id: string) {
-    if (!confirm('Permanently delete this reflection? This cannot be undone.')) return
-    try {
-      const { error } = await supabase.from('summaries').delete().eq('id', id)
-      if (error) throw error
-      setSummaries((prev) => prev.filter((s) => s.id !== id))
-      setStatus('Reflection deleted.')
-      showToast('Reflection deleted', 'info')
-    } catch (err: any) {
-      console.error('deleteSummary error', err)
-      showToast('Could not delete reflection: ' + (err?.message || String(err)), 'error')
+  /* delete summary with confirm */
+  const confirmDeleteSummary = (summaryId: string) => {
+    setConfirmTitle('Delete reflection')
+    setConfirmDesc('Permanently delete this reflection? This action cannot be undone.')
+    confirmActionRef.current = async () => {
+      setPendingDeleteId(summaryId)
+      setSummaries((prev) => prev.filter((s) => s.id !== summaryId))
+      try {
+        const { error } = await supabase.from('summaries').delete().eq('id', summaryId)
+        if (error) throw error
+        showToast('Reflection deleted', 'info')
+      } catch (err: any) {
+        console.error('delete summary failed', err)
+        showToast('Could not delete reflection: ' + (err?.message || String(err)), 'error')
+        await fetchSummaries()
+      } finally {
+        setPendingDeleteId(null)
+      }
     }
+    setConfirmOpen(true)
   }
 
-  // ---------------- voice / recording ----------------
+  /* ---------------- Voice recognition (hold to record) ---------------- */
   useEffect(() => {
     const Recog = window.SpeechRecognition || window.webkitSpeechRecognition || null
-    if (!Recog) {
-      return
-    }
+    if (!Recog) return
     const r = new Recog()
     recogRef.current = r
     r.lang = 'en-US'
@@ -383,7 +467,6 @@ export default function Home() {
 
     r.onerror = (e: any) => {
       console.error('SpeechRecognition error', e)
-      setStatus('Recognition error: ' + e.error)
       showToast('Recognition error: ' + e.error, 'error')
       setIsRecording(false)
     }
@@ -427,33 +510,24 @@ export default function Home() {
       recogRef.current?.stop()
     } catch {}
     setIsRecording(false)
-
-  // combine final + interim
     const text = (finalText + (interim ? ' ' + interim : '')).trim()
-
-  // clear interim state
     setInterim('')
-
     if (!text) {
       setStatus('No speech captured.')
       return
     }
-
-  // IMPORTANT: do NOT auto-save — instead put transcription into edit buffer
-    setFinalText(text) // user will now see and can edit before saving
+    // put transcription into edit buffer (no auto-save)
+    setFinalText(text)
     setStatus('Transcription ready — edit if needed, then click Save.')
-    showToast('Transcription ready — edit and press Save', 'info', 2200)
+    showToast('Transcription ready — edit and press Save', 'info')
+  }
 
-  // do not call saveTextEntry here
-}
-
-
-  // ---------------- expansion helpers ----------------
+  /* expand toggle */
   const toggleExpand = (id: string) => {
     setExpandedSummaryId((cur) => (cur === id ? null : id))
   }
 
-  // group summaries by for_date display (Priority B)
+  /* grouping (for display) */
   const groupedSummaries = summaries.reduce<Record<string, SummaryRow[]>>((acc, s) => {
     const groupKey = formatDateForGroup(s.for_date || s.created_at)
     if (!acc[groupKey]) acc[groupKey] = []
@@ -461,18 +535,42 @@ export default function Home() {
     return acc
   }, {})
 
-  // ---------------- UI render ----------------
+  /* Confirm modal handlers */
+  const runConfirmAction = async () => {
+    setConfirmOpen(false)
+    try {
+      await (confirmActionRef.current() as Promise<void> | void)
+    } catch (err) {
+      console.error('confirm action error', err)
+    }
+  }
+  const cancelConfirm = () => setConfirmOpen(false)
+
+  /* ---------------- UI ---------------- */
   return (
     <div className="min-h-screen bg-gradient-to-b from-indigo-50 to-white p-8">
-      {/* Toast */}
+      {/* Toast container */}
       <div className="fixed top-6 right-6 z-50">{toast && <Toast text={toast.text} kind={toast.kind} />}</div>
 
+      {/* Confirm modal */}
+      <ConfirmModal
+        open={confirmOpen}
+        title={confirmTitle}
+        description={confirmDesc}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        onConfirm={runConfirmAction}
+        onCancel={cancelConfirm}
+      />
+
       <main className="mx-auto w-full max-w-3xl">
+        {/* Header */}
         <header className="mb-10">
           <h1 className="text-4xl font-bold text-indigo-900 leading-tight">Mindstream</h1>
           <p className="mt-2 text-sm text-slate-600">Your thoughts. Finally understood.</p>
         </header>
 
+        {/* Privacy & auth */}
         <div className="mb-6 rounded-lg border bg-white/60 p-4 shadow-sm flex items-center justify-between">
           <div className="text-sm text-slate-700">
             <strong>Privacy:</strong> Voice is processed by your browser’s speech service; audio isn’t stored.
@@ -481,107 +579,99 @@ export default function Home() {
             {user ? (
               <>
                 <div className="text-sm text-slate-700">{user.email ?? user.id.slice(0, 8)}</div>
-                <button onClick={signOut} className="text-sm underline">
-                  Sign out
-                </button>
+                <button onClick={signOut} className="text-sm underline">Sign out</button>
               </>
             ) : (
               <div className="flex items-center gap-2">
-                <input
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@example.com"
-                  className="rounded-md border px-2 py-1 text-sm"
-                />
-                <button onClick={sendMagicLink} className="rounded-md bg-indigo-600 text-white px-3 py-1 text-sm">
-                  Magic link
-                </button>
-                <button onClick={signInWithGoogle} className="rounded-md border px-3 py-1 text-sm">
-                  Google
-                </button>
+                <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" className="rounded-md border px-2 py-1 text-sm" />
+                <button onClick={sendMagicLink} className="rounded-md bg-indigo-600 text-white px-3 py-1 text-sm">Magic link</button>
+                <button onClick={signInWithGoogle} className="rounded-md border px-3 py-1 text-sm">Google</button>
               </div>
             )}
           </div>
         </div>
 
-  {/* input and record - REPLACEMENT */}
-  <div className="mb-8">
-    <div className="flex gap-3 items-start">
-      {/* If there's a recorded transcription waiting for review, show a textarea */}
-      {finalText ? (
-        <textarea
-          value={finalText}
-          onChange={(e) => setFinalText(e.target.value)}
-          rows={4}
-          className="flex-1 rounded-md border px-4 py-3 shadow-sm text-[15px] leading-relaxed"
-          placeholder="Edit your transcription here before saving..."
-          aria-label="Edit transcription"
-        />
-      ) : (
-        <input
-          value={finalText}
-          onChange={(e) => setFinalText(e.target.value)}
-          className="flex-1 rounded-md border px-4 py-3 shadow-sm text-[15px] leading-relaxed"
-          placeholder="What’s on your mind?"
-          aria-label="What's on your mind?"
-        />
-      )}
+        {/* Input & recording */}
+        <div className="mb-8">
+          <div className="flex gap-3 items-start">
+            {finalText ? (
+              <textarea
+                value={finalText}
+                onChange={(e) => setFinalText(e.target.value)}
+                rows={4}
+                className="flex-1 rounded-md border px-4 py-3 shadow-sm text-[15px]"
+                placeholder="Edit transcription before saving..."
+                aria-label="Edit transcription"
+              />
+            ) : (
+              <input
+                value={finalText}
+                onChange={(e) => setFinalText(e.target.value)}
+                className="flex-1 rounded-md border px-4 py-3 shadow-sm text-[15px]"
+                placeholder="What’s on your mind?"
+                aria-label="Quick thought input"
+              />
+            )}
 
-      <div className="flex flex-col gap-2">
-        {/* Save typed or edited transcription */}
-        <button
-          onClick={() => saveTextEntry(finalText)}
-          disabled={!finalText || finalText.trim().length === 0}
-          className="rounded-md bg-indigo-700 text-white px-4 py-2 disabled:opacity-50"
-        >
-          Save
-        </button>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={() => saveTextEntry(finalText)}
+                disabled={!finalText.trim()}
+                className="rounded-md bg-indigo-700 text-white px-4 py-2 disabled:opacity-50"
+              >
+                Save
+              </button>
 
-        {/* Hold to record button unchanged */}
-        <button
-          onMouseDown={startRecording}
-          onMouseUp={stopRecording}
-          onTouchStart={startRecording}
-          onTouchEnd={stopRecording}
-          className={`rounded-md px-4 py-2 ${isRecording ? 'bg-teal-400 text-white' : 'bg-white border'}`}
-          title="Hold to record"
-          aria-pressed={isRecording}
-        >
-          {isRecording ? 'Recording…' : 'Hold to record'}
-        </button>
-      </div>
-    </div>
+              <button
+                onMouseDown={startRecording}
+                onMouseUp={stopRecording}
+                onTouchStart={startRecording}
+                onTouchEnd={stopRecording}
+                className={`rounded-md px-4 py-2 ${isRecording ? 'bg-teal-400 text-white' : 'bg-white border'}`}
+                title="Hold to record"
+                aria-pressed={isRecording}
+              >
+                {isRecording ? 'Recording…' : 'Hold to record'}
+              </button>
+            </div>
+          </div>
 
-    {/* When there is a recorded transcription, show explicit Save / Cancel controls and hint */}
-    {finalText && (
-      <div className="mt-3 flex items-center gap-3">
-        <div className="text-xs text-slate-500">Edit your transcription, then click Save. Or click Cancel to discard.</div>
-        <div className="ml-auto flex gap-2">
-          <button
-            onClick={() => {
-              // Cancel / discard transcript
-              setFinalText('')
-              setStatus('Transcription discarded.')
-              showToast('Transcription discarded', 'info')
-            }}
-            className="px-3 py-1 border rounded-md text-sm text-slate-600 bg-white"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={() => saveTextEntry(finalText)}
-            disabled={!finalText || finalText.trim().length === 0}
-            className="px-3 py-1 bg-indigo-600 text-white rounded-md text-sm"
-          >
-            Save transcription
-          </button>
+          {finalText && (
+            <div className="mt-3 flex justify-between items-center">
+              <div className="text-xs text-slate-500">Edit transcription, then click Save or Cancel.</div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    setFinalText('')
+                    setStatus('Transcription discarded.')
+                    showToast('Transcription discarded', 'info')
+                  }}
+                  className="px-3 py-1 border rounded-md text-sm text-slate-600 bg-white"
+                >
+                  Cancel
+                </button>
+                <button onClick={() => saveTextEntry(finalText)} className="px-3 py-1 bg-indigo-600 text-white rounded-md text-sm">
+                  Save transcription
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Generate Summary */}
+          <div className="mt-6 flex items-center justify-between">
+            <div className="text-xs text-slate-500">Daily Reflection — 24-hour summary</div>
+            <button
+              onClick={generate24hSummary}
+              disabled={isGenerating}
+              className="rounded-md bg-indigo-600 text-white px-3 py-1 text-sm transition-all hover:scale-[1.02]"
+            >
+              {isGenerating ? 'Reflecting…' : 'Reflect on your day'}
+            </button>
+          </div>
+          <p className="mt-2 text-xs text-slate-500">Generate a motivational reflection from your entries, then rate or discard.</p>
         </div>
-      </div>
-    )}
-  </div>
 
-
-        {/* generated summary (preview -> rate) */}
+        {/* Generated Summary (preview -> rate) */}
         {generatedSummary && (
           <div className="mb-8 rounded-lg border bg-gradient-to-b from-indigo-50/60 to-white p-4 shadow-md transition-opacity duration-300 ease-out">
             <div className="flex items-start justify-between">
@@ -589,9 +679,7 @@ export default function Home() {
                 <div className="text-sm font-semibold text-indigo-800">✨ Reflection generated {generatedAt ? `— ${new Date(generatedAt).toLocaleTimeString()}` : ''}</div>
                 <div className="text-xs text-slate-500">Read it, then rate (1–5) to save — or discard it permanently.</div>
               </div>
-              <button onClick={() => { setGeneratedSummary(null); setGeneratedAt(null); setStatus(null); }} className="text-xs text-slate-400 underline">
-                Dismiss
-              </button>
+              <button onClick={() => { setGeneratedSummary(null); setGeneratedAt(null); setStatus(null); }} className="text-xs text-slate-400 underline">Dismiss</button>
             </div>
 
             <div className="mt-3 p-4 rounded-md bg-white/80 text-slate-800 whitespace-pre-wrap leading-relaxed">
@@ -639,7 +727,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* entries */}
+        {/* Entries list */}
         <section className="space-y-4 mb-12">
           <div className="text-sm text-slate-500">Your Reflections</div>
           <div className="rounded-lg bg-white p-4 border shadow-sm">
@@ -647,9 +735,21 @@ export default function Home() {
             {entries.length > 0 && (
               <ul className="space-y-3">
                 {entries.map((e) => (
-                  <li key={e.id} className="p-3 border rounded-md bg-white">
-                    <div className="text-slate-800 whitespace-pre-wrap">{e.content}</div>
-                    <div className="mt-2 text-xs text-slate-400">{new Date(e.created_at!).toLocaleString()}</div>
+                  <li key={e.id} className="p-3 border rounded-md bg-white flex justify-between items-start">
+                    <div className="flex-1 pr-4">
+                      <div className="text-slate-800 whitespace-pre-wrap">{e.content}</div>
+                      <div className="mt-2 text-xs text-slate-400">{new Date(e.created_at || Date.now()).toLocaleString()}</div>
+                    </div>
+                    <div className="flex flex-col items-end gap-2">
+                      <button
+                        onClick={() => confirmDeleteEntry(e.id)}
+                        className="text-xl px-2 py-1 rounded-md hover:bg-rose-50"
+                        title="Delete entry"
+                        aria-label="Delete entry"
+                      >
+                        🗑️
+                      </button>
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -657,7 +757,7 @@ export default function Home() {
           </div>
         </section>
 
-        {/* summaries (grouped by date) */}
+        {/* Summaries list grouped by date */}
         <section id="your-summaries-section" ref={summariesRef as any} className="space-y-6 mb-16">
           <div className="text-sm text-slate-500">Your Summaries</div>
           <div className="rounded-lg bg-white p-4 border shadow-sm space-y-6">
@@ -704,15 +804,14 @@ export default function Home() {
                                 </svg>
                               </button>
 
-                              <div className="flex flex-col items-end gap-2">
-                                <button
-                                  onClick={() => deleteSummary(s.id)}
-                                  className="text-xs px-2 py-1 border rounded-md text-slate-500 hover:bg-rose-50"
-                                  title="Delete summary"
-                                >
-                                  Delete
-                                </button>
-                              </div>
+                              <button
+                                onClick={() => confirmDeleteSummary(s.id)}
+                                className="text-xl px-2 py-1 rounded-md hover:bg-rose-50"
+                                title="Delete reflection"
+                                aria-label="Delete reflection"
+                              >
+                                🗑️
+                              </button>
                             </div>
                           </div>
                         </div>
