@@ -3,6 +3,8 @@ import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import Header from '../components/Header'
 import EntryInput from '../components/EntryInput'
+import ToastContainer from '../components/ToastContainer'
+
 import {
   previewText as previewTextUtil,
   markDownLike as markDownLikeUtil,
@@ -520,8 +522,7 @@ export default function Home() {
   /* ---------------- UI ---------------- */
   return (
     <div className="min-h-screen bg-gradient-to-b from-indigo-50 to-white p-8">
-      {/* Toast container */}
-      <div className="fixed top-6 right-6 z-50">{toast && <Toast text={toast.text} kind={toast.kind} />}</div>
+      <ToastContainer toast={toast} />
 
       {/* Confirm modal */}
       <ConfirmModal
