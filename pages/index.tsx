@@ -85,6 +85,7 @@ export default function Home() {
       setStatus(`Error signing out: ${error.message}`)
     } else {
       setUser(null)
+      setEntries([]) // <-- important: clear visible entries on logout
       setStatus(null)
     }
   }
@@ -93,14 +94,19 @@ export default function Home() {
   const fetchEntries = async () => {
     setLoading(true)
     try {
-      const resp = await fetch('/api/entries')
-      const payload = await resp.json()
-      if (!resp.ok) {
-        console.error('Fetch entries error:', payload)
-        setStatus(`Error loading entries: ${payload?.error || 'unknown'}`)
+      // When using the anon key in the browser, Supabase enforces RLS for the current session
+      const { data, error } = await supabase
+        .from('entries')
+        .select('id, content, source, metadata, created_at, user_id')
+        .order('created_at', { ascending: false })
+        .limit(50)
+
+      if (error) {
+        console.error('Client fetch entries error:', error)
+        setStatus(`Error loading entries: ${error.message}`)
         setEntries([])
       } else {
-        setEntries(payload.data || [])
+        setEntries(data || [])
         setStatus(null)
       }
     } catch (e: any) {
@@ -114,7 +120,9 @@ export default function Home() {
 
   useEffect(() => {
     fetchEntries()
-  }, [])
+    // optionally re-run when user signs in/out; we already setUser via onAuthStateChange so:
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id])
 
   // save entry:
   // - if signed in -> use client insert with user_id so RLS accepts it
