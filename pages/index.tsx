@@ -2,188 +2,178 @@
 import { useEffect, useState, useRef } from 'react'
 import { supabase } from '../lib/supabaseClient'
 
-type Entry = {
-  id: string
-  content: string
-  source: string
-  created_at: string
-  user_id: string | null
+declare global {
+  interface Window {
+    webkitSpeechRecognition?: any
+    SpeechRecognition?: any
+  }
 }
 
 export default function Home() {
   const [input, setInput] = useState('')
   const [status, setStatus] = useState<string | null>(null)
-  const [entries, setEntries] = useState<Entry[] | null>(null)
-  const [loading, setLoading] = useState(false)
-
+  const [entries, setEntries] = useState<any[]>([])
   const [user, setUser] = useState<{ id: string; email?: string } | null>(null)
-  const [emailForOtp, setEmailForOtp] = useState('')
+  const [email, setEmail] = useState('')
 
-  // recording state
+  // Voice state
   const [isRecording, setIsRecording] = useState(false)
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
-  const audioChunksRef = useRef<Blob[]>([])
+  const [isSupported, setIsSupported] = useState<boolean | null>(null)
+  const [interim, setInterim] = useState('')
+  const [finalText, setFinalText] = useState('')
+  const recogRef = useRef<any>(null)
+  const timeoutRef = useRef<number | null>(null)
 
-  // auth
-  const loadUser = async () => {
-    const { data } = await supabase.auth.getUser()
-    if (data?.user) setUser({ id: data.user.id, email: data.user.email ?? undefined })
-    else setUser(null)
-  }
-
+  // ---------------- AUTH ----------------
   useEffect(() => {
-    loadUser()
+    const load = async () => {
+      const { data } = await supabase.auth.getUser()
+      if (data?.user) setUser({ id: data.user.id, email: data.user.email ?? undefined })
+    }
+    load()
     const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
       if (session?.user) setUser({ id: session.user.id, email: session.user.email ?? undefined })
       else setUser(null)
-      // refresh entries whenever auth state changes
       fetchEntries()
     })
     return () => sub.subscription.unsubscribe()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // fetch entries (client-side -> RLS)
-  const fetchEntries = async () => {
-    setLoading(true)
-    try {
-      const { data, error } = await supabase
-        .from('entries')
-        .select('id, content, source, metadata, created_at, user_id')
-        .order('created_at', { ascending: false })
-        .limit(50)
-
-      if (error) {
-        console.error('Client fetch entries error:', error)
-        setStatus(`Error loading entries: ${error.message}`)
-        setEntries([])
-      } else {
-        setEntries(data || [])
-        setStatus(null)
-      }
-    } catch (e: any) {
-      console.error('Network error fetching entries:', e)
-      setStatus(`Error loading entries: ${e?.message || String(e)}`)
-      setEntries([])
-    } finally {
-      setLoading(false)
-    }
-  }
-  useEffect(() => { fetchEntries() }, [user?.id])
-
-  // sign in/out functions omitted here for brevity — reuse your existing ones
   const signInWithGoogle = async () => {
     setStatus('Redirecting to Google...')
     await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } })
   }
+
   const sendMagicLink = async () => {
-    if (!emailForOtp.includes('@')) { setStatus('Enter a valid email'); return }
+    if (!email.includes('@')) return setStatus('Enter a valid email.')
     setStatus('Sending magic link...')
-    const { error } = await supabase.auth.signInWithOtp({ email: emailForOtp })
-    if (error) { setStatus(`Error sending link: ${error.message}`) } else { setStatus('Magic link sent.') }
+    const { error } = await supabase.auth.signInWithOtp({ email })
+    setStatus(error ? error.message : 'Magic link sent — check your inbox.')
   }
+
   const signOut = async () => {
-    setStatus('Signing out...')
-    const { error } = await supabase.auth.signOut()
-    if (error) setStatus(`Error signing out: ${error.message}`)
-    else { setUser(null); setEntries([]); setStatus(null) }
+    await supabase.auth.signOut()
+    setUser(null)
+    setEntries([])
+    setStatus(null)
   }
 
-  // save text entry (existing)
-  const saveTextEntry = async () => {
-    if (!input.trim()) return
-    setStatus('Saving...')
-    const { data: udata } = await supabase.auth.getUser()
-    const uid = udata?.user?.id
-    if (!uid) { setStatus('Please sign in (Google or magic link) to save your thought.'); return }
-    const { error } = await supabase.from('entries').insert([{ content: input, source: 'text', user_id: uid }])
-    if (error) { setStatus(`Error saving entry: ${error.message}`) } else { setInput(''); setStatus('Saved successfully!'); fetchEntries() }
+  // ---------------- ENTRIES ----------------
+  const fetchEntries = async () => {
+    const { data, error } = await supabase
+      .from('entries')
+      .select('id, content, created_at')
+      .order('created_at', { ascending: false })
+    if (!error) setEntries(data || [])
   }
 
-  // RECORDING helpers
-  const startRecording = async () => {
-    try {
-      setStatus('Requesting microphone...')
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      audioChunksRef.current = []
-      const mr = new MediaRecorder(stream)
-      mediaRecorderRef.current = mr
-      mr.ondataavailable = (ev) => { if (ev.data && ev.data.size > 0) audioChunksRef.current.push(ev.data) }
-      mr.onstop = () => { /* handled in stopRecording */ }
-      mr.start()
-      setIsRecording(true)
-      setStatus('Recording...')
-    } catch (e: any) {
-      console.error('mic error', e)
-      setStatus('Microphone access denied or not available.')
+  const saveTextEntry = async (text: string, source = 'text') => {
+    const { data: u } = await supabase.auth.getUser()
+    const uid = u?.user?.id
+    if (!uid) throw new Error('Please sign in first.')
+    const { error } = await supabase.from('entries').insert([{ content: text, source, user_id: uid }])
+    if (error) throw error
+    fetchEntries()
+  }
+
+  // ---------------- WEB SPEECH API ----------------
+  useEffect(() => {
+    const Recog = window.SpeechRecognition || window.webkitSpeechRecognition || null
+    if (!Recog) {
+      setIsSupported(false)
+      return
     }
-  }
+    setIsSupported(true)
+    const r = new Recog()
+    r.lang = 'en-US'
+    r.interimResults = true
+    r.maxAlternatives = 1
+    r.continuous = false
+    recogRef.current = r
 
-  const stopRecording = async () => {
-    const mr = mediaRecorderRef.current
-    if (!mr) return
-    mr.stop()
-    setIsRecording(false)
-    setStatus('Processing recording...')
-    // assemble blob
-    const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' })
-    // optional: convert if needed — we'll upload as webm (OpenAI accepts webm)
-    try {
-      const filePath = await uploadAudioBlob(blob)
-      // call server to transcribe
-      const t = await transcribeFile(filePath)
-      if (t) {
-        // save transcript as entry (client insert)
-        const { data: u } = await supabase.auth.getUser()
-        const uid = u?.user?.id
-        if (!uid) { setStatus('Please sign in to save transcription.'); return }
-        const { error } = await supabase.from('entries').insert([{ content: t, source: 'voice', user_id: uid, metadata: { file: filePath } }])
-        if (error) { setStatus(`Error saving entry: ${error.message}`) }
-        else { setStatus('Saved voice entry!'); fetchEntries() }
-      } else {
-        setStatus('Transcription returned empty.')
+    r.onresult = (event: any) => {
+      let interimT = ''
+      let finalT = ''
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        const res = event.results[i]
+        if (res.isFinal) finalT += res[0].transcript
+        else interimT += res[0].transcript
       }
+      if (interimT) setInterim(interimT)
+      if (finalT) {
+        setFinalText((s) => (s ? s + ' ' + finalT : finalT))
+        setInterim('')
+      }
+    }
+
+    r.onerror = (e: any) => {
+      console.error('SpeechRecognition error', e)
+      setStatus(`Error: ${e.error}`)
+      setIsRecording(false)
+    }
+
+    r.onend = () => {
+      setIsRecording(false)
+      clearTimeoutIfAny()
+    }
+
+    return () => {
+      r.onresult = null
+      r.onerror = null
+      r.onend = null
+      recogRef.current = null
+      clearTimeoutIfAny()
+    }
+  }, [])
+
+  const clearTimeoutIfAny = () => {
+    if (timeoutRef.current) {
+      window.clearTimeout(timeoutRef.current)
+      timeoutRef.current = null
+    }
+  }
+
+  const start = () => {
+    if (!recogRef.current) {
+      setStatus('Voice recognition not supported in this browser.')
+      return
+    }
+    try {
+      recogRef.current.start()
+      setIsRecording(true)
+      setInterim('')
+      setFinalText('')
+      setStatus('Listening...')
+      timeoutRef.current = window.setTimeout(() => stop(), 45_000)
     } catch (err: any) {
-      console.error('recording -> upload -> transcribe error', err)
-      setStatus(`Error: ${err?.message || String(err)}`)
+      console.error('start error', err)
+      setStatus('Could not start mic (check permissions).')
+      setIsRecording(false)
     }
   }
 
-  // upload audio to Supabase storage (private bucket 'audio')
-  async function uploadAudioBlob(blob: Blob) {
-    // create unique path
-    const id = cryptoRandomId()
-    const ext = 'webm'
-    const filePath = `${id}.${ext}`
-    // use the browser supabase client to upload to storage
-    const { error } = await supabase.storage.from('audio').upload(filePath, blob, { contentType: blob.type, upsert: false })
-    if (error) throw new Error(error.message)
-    return filePath
-  }
-
-  // call server to transcribe file (server will download using service_role)
-  async function transcribeFile(filePath: string) {
-    setStatus('Transcribing...')
-    const resp = await fetch('/api/transcribe', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ bucket: 'audio', filePath })
-    })
-    const payload = await resp.json()
-    if (!resp.ok) {
-      console.error('Transcribe failed', payload)
-      throw new Error(payload?.error || 'Transcription failed')
+  const stop = async () => {
+    try {
+      recogRef.current?.stop()
+    } catch (e) {}
+    clearTimeoutIfAny()
+    setIsRecording(false)
+    const text = (finalText + (interim ? ' ' + interim : '')).trim()
+    if (!text) return setStatus('No speech detected.')
+    setStatus('Saving transcription...')
+    try {
+      await saveTextEntry(text, 'voice')
+      setStatus('Saved voice transcription.')
+      setInterim('')
+      setFinalText('')
+    } catch (err: any) {
+      setStatus('Save failed: ' + err.message)
     }
-    return payload.transcript as string
   }
 
-  function cryptoRandomId() {
-    // short unique id (not cryptographic necessary)
-    return Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-6)
-  }
-
+  // ---------------- UI ----------------
   return (
-    <main className="min-h-screen bg-gradient-to-b from-indigo-50 to-white flex items-start justify-center p-8">
+    <main className="min-h-screen bg-gradient-to-b from-indigo-50 to-white flex justify-center p-8">
       <div className="w-full max-w-2xl">
         <header className="mb-6">
           <h1 className="text-3xl font-semibold text-indigo-900">Mindstream</h1>
@@ -191,16 +181,16 @@ export default function Home() {
         </header>
 
         <div className="mb-4 p-4 rounded-lg border border-slate-100 bg-white shadow-sm flex items-center justify-between">
-          <div><strong>Privacy:</strong> Your thoughts are encrypted and private.</div>
+          <div><strong>Privacy:</strong> Your voice is processed by your browser’s built-in speech service (e.g. Google or Apple). Audio isn’t stored or sent to us.</div>
           <div className="flex items-center gap-3">
             {user ? (
               <>
-                <div className="text-sm text-slate-700">Signed in: {user.email ?? user.id.slice(0,8)}</div>
+                <div className="text-sm text-slate-700">Signed in: {user.email ?? user.id.slice(0, 8)}</div>
                 <button onClick={signOut} className="text-sm underline">Sign out</button>
               </>
             ) : (
               <div className="flex items-center gap-2">
-                <input value={emailForOtp} onChange={(e)=>setEmailForOtp(e.target.value)} placeholder="you@example.com" className="rounded-md border px-2 py-1 text-sm" />
+                <input value={email} onChange={(e)=>setEmail(e.target.value)} placeholder="you@example.com" className="rounded-md border px-2 py-1 text-sm" />
                 <button onClick={sendMagicLink} className="rounded-md bg-indigo-600 text-white px-3 py-1 text-sm">Magic link</button>
                 <button onClick={signInWithGoogle} className="rounded-md border px-3 py-1 text-sm">Sign in with Google</button>
               </div>
@@ -208,38 +198,50 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="mb-4">
+        {/* Manual text input */}
+        <div className="mb-6">
           <div className="flex gap-2">
             <input value={input} onChange={(e)=>setInput(e.target.value)} className="flex-1 rounded-md border px-3 py-2 shadow-sm" placeholder="What’s on your mind?" />
-            <button onClick={saveTextEntry} className="rounded-md bg-indigo-700 text-white px-4 py-2">Save</button>
+            <button onClick={()=>saveTextEntry(input)} className="rounded-md bg-indigo-700 text-white px-4 py-2">Save</button>
           </div>
           {status && <p className="mt-2 text-sm text-slate-600">{status}</p>}
         </div>
 
-        {/* Recorder UI */}
+        {/* Voice STT section */}
         <div className="mb-6">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => { isRecording ? stopRecording() : startRecording() }}
-              className={`px-4 py-2 rounded-md ${isRecording ? 'bg-red-600 text-white' : 'bg-white border'}`}
-            >
-              {isRecording ? 'Stop' : 'Record voice'}
-            </button>
-            <div className="text-sm text-slate-500">Record a short reflection (webm). Then it will be transcribed and saved.</div>
-          </div>
+          {isSupported ? (
+            <div className="space-y-2">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => (isRecording ? stop() : start())}
+                  className={`px-4 py-2 rounded-md ${isRecording ? 'bg-red-600 text-white' : 'bg-white border'}`}
+                >
+                  {isRecording ? 'Stop' : 'Record (Browser STT)'}
+                </button>
+                <div className="text-sm text-slate-500">{isRecording ? 'Listening...' : 'Tap to record up to 45s'}</div>
+              </div>
+              <div className="p-2 rounded border bg-white min-h-[40px]">
+                <div className="text-slate-800">{finalText}<span className="text-slate-400 italic">{interim}</span></div>
+              </div>
+            </div>
+          ) : (
+            <div className="p-3 rounded-md border bg-white text-sm text-slate-600">
+              Voice input not supported in this browser. Try Chrome or Edge on desktop or Android.
+            </div>
+          )}
         </div>
 
+        {/* Entries */}
         <section className="space-y-4">
-          <div className="text-sm text-slate-500">Today — Auto summary (10 PM)</div>
+          <div className="text-sm text-slate-500">Your Reflections</div>
           <div className="rounded-lg bg-white p-4 border shadow-sm">
-            {loading && <div className="text-slate-500">Loading entries...</div>}
-            {!loading && entries && entries.length === 0 && <div className="text-slate-700">No entries yet — your thoughts will appear here once you start typing or recording.</div>}
-            {!loading && entries && entries.length > 0 && (
+            {entries.length === 0 && <div className="text-slate-700">No entries yet — your thoughts will appear here once you start typing or recording.</div>}
+            {entries.length > 0 && (
               <ul className="space-y-3">
                 {entries.map((e) => (
                   <li key={e.id} className="p-3 border rounded-md bg-white">
                     <div className="text-slate-800">{e.content}</div>
-                    <div className="mt-2 text-xs text-slate-400">{new Date(e.created_at).toLocaleString()}{e.user_id ? ` • user: ${e.user_id.slice(0,8)}` : ''}</div>
+                    <div className="mt-2 text-xs text-slate-400">{new Date(e.created_at).toLocaleString()}</div>
                   </li>
                 ))}
               </ul>
