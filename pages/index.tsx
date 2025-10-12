@@ -107,6 +107,8 @@ export default function Home() {
   /* Data */
   const [entries, setEntries] = useState<EntryRow[]>([])
   const [summaries, setSummaries] = useState<SummaryRow[]>([])
+  const [streakCount, setStreakCount] = useState<number>(0)
+
 
   /* Generated summary & state */
   const [generatedSummary, setGeneratedSummary] = useState<string | null>(null)
@@ -161,6 +163,7 @@ export default function Home() {
       if (data?.user) setUser({ id: data.user.id, email: data.user.email ?? undefined })
       await fetchEntries()
       await fetchSummaries()
+      await fetchStreak()
     }
     load()
     const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
@@ -216,6 +219,25 @@ export default function Home() {
     }
   }
 
+
+  const fetchStreak = async () => {
+    try {
+      const { data: u } = await supabase.auth.getUser()
+      const uid = u?.user?.id
+      if (!uid) return
+      const { data, error } = await supabase
+        .from('user_stats')
+        .select('streak_count')
+        .eq('user_id', uid)
+        .single()
+      if (!error && data) setStreakCount(data.streak_count || 0)
+    } catch (err) {
+        console.error('fetchStreak error', err)
+      }
+    }
+
+
+  
   const saveTextEntry = async (text: string, source = 'text') => {
     try {
       const { data: u } = await supabase.auth.getUser()
@@ -389,7 +411,30 @@ export default function Home() {
       setGeneratedSummary(null)
       setGeneratedAt(null)
       setHoverRating(0)
-      showToast('Reflection saved — you captured another piece of your day.', 'success')
+      try {
+        await fetch('/api/user-stats', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: uid, for_date: todayIso })
+        })
+      } catch (err) {
+        console.warn('streak update failed', err)
+      }
+      setTimeout(() => {
+        const el = document.getElementById('your-summaries-section')
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }, 250)
+      try {
+        await fetch('/api/user-stats', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: uid, for_date: todayIso })
+        })
+        await fetchStreak()
+      } catch (err) {
+        console.warn('streak update failed', err)
+      }
+
       // scroll
       setTimeout(() => {
         const el = document.getElementById('your-summaries-section')
@@ -557,7 +602,7 @@ export default function Home() {
           signOut={signOut}
           sendMagicLink={sendMagicLink}
           signInWithGoogle={signInWithGoogle}
-          // future: pass streakCount when available
+          streakCount={streakCount}
         />
 
         {/* Input & recording (componentized) */}
