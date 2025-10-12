@@ -228,12 +228,23 @@ export default function Home() {
         return
       }
 
-      const { error } = await supabase.from('entries').insert([{ content: trimmed, source, user_id: uid }])
+      const { data: inserted, error } = await supabase
+        .from('entries')
+        .insert([{ content: trimmed, source, user_id: uid }])
+        .select('id')
+
       if (error) throw error
+
+      const newId = Array.isArray(inserted) && inserted.length ? inserted[0].id : null
+      if (newId) setRecentlyAddedId(newId)
 
       setFinalText('')
       showToast(randomAffirmation(), 'success', 2800)
       await fetchEntries()
+
+      // fade out highlight after a moment
+        setTimeout(() => setRecentlyAddedId(null), 2000)
+
     } catch (err: any) {
       console.error('saveTextEntry', err)
       showToast('Save failed: ' + (err?.message || String(err)), 'error')
@@ -625,7 +636,13 @@ export default function Home() {
             {entries.length > 0 && (
               <ul className="space-y-3">
                 {entries.map((e) => (
-                  <li key={e.id} className="p-3 border rounded-md bg-white flex justify-between items-start">
+                  <li
+                  key={e.id}
+                    className={`p-3 border rounded-md bg-white flex justify-between items-start ${
+                      recentlyAddedId === e.id ? 'pulse-ring ring-2 ring-teal-200' : ''
+                    }`}
+                  >
+
                     <div className="flex-1 pr-4">
                       <div className="text-slate-800 whitespace-pre-wrap">{e.content}</div>
                       <div className="mt-2 text-xs text-slate-400">{new Date(e.created_at || Date.now()).toLocaleString()}</div>
@@ -662,7 +679,12 @@ export default function Home() {
                     const preview = previewText(s.summary_text || '', 220)
                     const highlight = recentlyAddedId === s.id
                     return (
-                      <li key={s.id} className={`rounded-md border bg-white overflow-hidden transition-shadow ${highlight ? 'ring-2 ring-teal-200' : ''}`}>
+                      <li
+                        key={s.id}
+                        className={`rounded-md border bg-white overflow-hidden transition-shadow ${
+                          highlight ? 'ring-2 ring-teal-200 pulse-ring' : ''
+                        }`}
+                      >
                         <div className="p-4 flex items-start gap-4">
                           <div className="flex-1">
                             <div className="text-sm text-slate-800 leading-snug line-clamp-4">{preview}</div>
