@@ -29,6 +29,16 @@ function Toast({ text, kind = 'info' }: { text: string; kind?: 'info' | 'success
   )
 }
 
+// truncate preserving words
+function previewText(s: string, max = 220) {
+  if (!s) return ''
+  const t = s.replace(/\s+/g, ' ').trim()
+  if (t.length <= max) return t
+  const cut = t.slice(0, max)
+  const lastSpace = cut.lastIndexOf(' ')
+  return (lastSpace > 40 ? cut.slice(0, lastSpace) : cut) + '…'
+}
+
 export default function Home() {
   // Auth & UI state
   const [user, setUser] = useState<{ id: string; email?: string } | null>(null)
@@ -45,6 +55,11 @@ export default function Home() {
   const [summaries, setSummaries] = useState<SummaryRow[]>([])
   const [isSavingRating, setIsSavingRating] = useState(false)
   const [toast, setToast] = useState<{ text: string; kind?: 'info' | 'success' | 'error' } | null>(null)
+
+  // expansion state (only one expanded at a time)
+  const [expandedSummaryId, setExpandedSummaryId] = useState<string | null>(null)
+  // newly added highlight
+  const [recentlyAddedId, setRecentlyAddedId] = useState<string | null>(null)
 
   // rating hover state for generated summary preview
   const [hoverRating, setHoverRating] = useState<number>(0)
@@ -222,6 +237,13 @@ export default function Home() {
       const newRow = Array.isArray(inserted) && inserted.length ? inserted[0] : null
       if (newRow) {
         setSummaries((prev) => [newRow, ...prev])
+        setRecentlyAddedId(newRow.id)
+        setExpandedSummaryId(newRow.id) // auto-expand new one briefly
+        // collapse after 2.5s so user sees it without leaving it open forever
+        setTimeout(() => {
+          setExpandedSummaryId(null)
+          setRecentlyAddedId(null)
+        }, 2500)
       } else {
         fetchSummaries()
       }
@@ -317,6 +339,18 @@ export default function Home() {
     setStatus('Saved voice entry.')
   }
 
+  // ---------------- UI helpers for expansion ----------------
+  const toggleExpand = (id: string) => {
+    setExpandedSummaryId((cur) => (cur === id ? null : id))
+  }
+
+  // format date for display: prefer for_date then created_at
+  function displayDate(s: SummaryRow) {
+    if (s.for_date) return new Date(s.for_date).toLocaleDateString()
+    if (s.created_at) return new Date(s.created_at).toLocaleString()
+    return ''
+  }
+
   // ---------------- UI ----------------
   return (
     <div className="min-h-screen bg-gradient-to-b from-indigo-50 to-white p-8">
@@ -390,7 +424,7 @@ export default function Home() {
           <div className="text-xs text-slate-500 mt-2">Generate a motivational reflection from your entries, then rate or discard.</div>
         </div>
 
-        {/* Generated Summary Card */}
+        {/* Generated Summary Card (unchanged) */}
         {generatedSummary && (
           <div className="mb-8 rounded-lg border bg-gradient-to-b from-indigo-50/60 to-white p-4 shadow-md transition-opacity duration-300 ease-out animate-[fadein_250ms]">
             <div className="flex items-start justify-between">
@@ -471,12 +505,72 @@ export default function Home() {
             {summaries.length === 0 && <div className="text-slate-700">No summaries yet — generate one above.</div>}
             {summaries.length > 0 && (
               <ul className="space-y-3">
-                {summaries.map((s: SummaryRow) => (
-                  <li key={s.id} className="p-4 border rounded-md bg-white flex justify-between items-start">
-                    <div className="flex-1 pr-4 leading-relaxed text-slate-800" dangerouslySetInnerHTML={{ __html: markDownLike(s.summary_text) }} />
-                    <div className="text-lg text-yellow-500 mt-1">{renderStars(s.rating)}</div>
-                  </li>
-                ))}
+                {summaries.map((s: SummaryRow) => {
+                  const isExpanded = expandedSummaryId === s.id
+                  const preview = previewText(s.summary_text || '')
+                  const isRecent = recentlyAddedId === s.id
+                  // Use a ref on content for dynamic height if needed, but for simplicity we use maxHeight transitions with a large value
+                  return (
+                    <li
+                      key={s.id}
+                      className={`rounded-md border bg-white overflow-hidden transition-shadow ${isRecent ? 'ring-2 ring-teal-200' : ''}`}
+                    >
+                      {/* Collapsed header */}
+                      <div className="p-4 flex items-start gap-4">
+                        <div className="flex-1">
+                          <div className="text-sm text-slate-800 leading-snug line-clamp-4">{preview}</div>
+                          <div className="mt-2 text-xs text-slate-400 flex items-center gap-3">
+                            <span>{displayDate(s)}</span>
+                            <span className="text-yellow-500">{renderStars(s.rating)}</span>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col items-end gap-2">
+                          <button
+                            aria-expanded={isExpanded}
+                            aria-controls={`summary-body-${s.id}`}
+                            onClick={() => toggleExpand(s.id)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault()
+                                toggleExpand(s.id)
+                              }
+                            }}
+                            className="p-2 rounded-md border bg-white hover:bg-indigo-50"
+                            title={isExpanded ? 'Collapse summary' : 'Expand summary'}
+                          >
+                            <svg className={`w-5 h-5 transform transition-transform ${isExpanded ? 'rotate-180' : 'rotate-0'}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Expandable body */}
+                      <div
+                        id={`summary-body-${s.id}`}
+                        className="px-4 pb-4 transition-[max-height,opacity] duration-300 ease-in-out overflow-hidden"
+                        style={{
+                          maxHeight: isExpanded ? '1200px' : '0px',
+                          opacity: isExpanded ? 1 : 0,
+                        }}
+                        role="region"
+                        aria-hidden={!isExpanded}
+                      >
+                        <div className="mt-2 text-slate-800 leading-relaxed whitespace-pre-wrap">
+                          <div dangerouslySetInnerHTML={{ __html: markDownLike(s.summary_text) }} />
+                        </div>
+                        <div className="mt-3 flex items-center justify-between">
+                          <div className="text-xs text-slate-400">Saved {displayDate(s)}</div>
+                          <div className="flex items-center gap-3">
+                            <div className="text-sm text-slate-600">Your rating: <span className="text-yellow-500">{renderStars(s.rating)}</span></div>
+                            {/* future actions: share, delete */}
+                          </div>
+                        </div>
+                      </div>
+                    </li>
+                  )
+                })}
               </ul>
             )}
           </div>
@@ -489,13 +583,11 @@ export default function Home() {
   )
 }
 
-// Helper: lightweight "markdown-like" conversion for bold lines like **Headline**
+// lightweight "markdown-like" conversion for bold lines like **Headline**
 function markDownLike(text: string) {
-  // convert **bold** into bold-ish HTML with a subtle indigo color for headers
-  let out = text
+  let out = (text || '')
     .replace(/\*\*(.*?)\*\*/g, '<strong style="color:#3b82f6">$1</strong>')
     .replace(/\n\n/g, '<br/><br/>')
-  // ensure safe fallback (we assume content is generated by AI or user; keep simple)
   return out
 }
 
