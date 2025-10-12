@@ -4,32 +4,11 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 type Entry = { content: string; created_at: string; source?: string; metadata?: any }
 
 const GROQ_KEY = process.env.GROQ_API_KEY
-const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
-
-
-const r = await fetch(GROQ_URL, {
-  method: 'POST',
-  headers: {
-    'Authorization': `Bearer ${GROQ_KEY}`,
-    'Content-Type': 'application/json',
-  },
-  body: JSON.stringify(body),
-})
-
-// 👇 ADD THIS RIGHT HERE
-if (!r.ok) {
-  const txt = await r.text()
-  console.error("Groq error details:", r.status, txt)
-  return res.status(500).json({
-    error: "Groq request failed",
-    status: r.status,
-    detail: txt
-  })
-}
-
+const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+
   try {
     const { entries } = req.body as { entries?: Entry[] }
     if (!entries?.length) return res.status(400).json({ error: 'entries array required' })
@@ -53,7 +32,7 @@ Tone: warm, encouraging, yet realistic. Quote short phrases from entries when re
 Do not make up facts; if unclear, say so.`
 
     const body = {
-      model: 'llama3-8b-8192',
+      model: 'llama3-8b-8192', // or "mixtral-8x7b-32768"
       temperature: 0.3,
       max_tokens: 900,
       messages: [
@@ -62,6 +41,7 @@ Do not make up facts; if unclear, say so.`
       ],
     }
 
+    // ✅ All requests go INSIDE the handler
     const r = await fetch(GROQ_URL, {
       method: 'POST',
       headers: {
@@ -71,10 +51,15 @@ Do not make up facts; if unclear, say so.`
       body: JSON.stringify(body),
     })
 
+    // 👇 This is the debug block — keep it here
     if (!r.ok) {
       const txt = await r.text()
-      console.error('Groq error', r.status, txt)
-      return res.status(500).json({ error: 'Groq request failed', detail: txt })
+      console.error('Groq error details:', r.status, txt)
+      return res.status(500).json({
+        error: 'Groq request failed',
+        status: r.status,
+        detail: txt,
+      })
     }
 
     const data = await r.json()
