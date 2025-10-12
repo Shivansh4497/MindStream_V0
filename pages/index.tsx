@@ -22,7 +22,8 @@ export default function Home() {
   const [generatedSummary, setGeneratedSummary] = useState<string | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
   const [summaries, setSummaries] = useState<any[]>([])
-  // rating hover state for the generated summary preview
+  const [isSavingRating, setIsSavingRating] = useState(false)
+  // rating hover state for generated summary preview
   const [hoverRating, setHoverRating] = useState<number>(0)
 
   // Voice state
@@ -133,7 +134,7 @@ export default function Home() {
 
       setGeneratedSummary(payload.summary)
       setHoverRating(0)
-      setStatus('Summary ready — rate or discard below.')
+      setStatus('Summary generated — rate to save or discard.')
     } catch (err: any) {
       console.error(err)
       setStatus('Failed: ' + (err?.message || String(err)))
@@ -146,11 +147,18 @@ export default function Home() {
   async function saveRatedSummary(rating: number) {
     if (!generatedSummary) return
     try {
+      setIsSavingRating(true)
+      setStatus('Saving summary...')
       const { data: u } = await supabase.auth.getUser()
       const uid = u?.user?.id
-      if (!uid) throw new Error('Not signed in')
+      if (!uid) {
+        setStatus('Please sign in to save the summary.')
+        setIsSavingRating(false)
+        return
+      }
       const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
       const upto = new Date().toISOString()
+
       const { error } = await supabase.from('summaries').insert([{
         user_id: uid,
         range_start: since,
@@ -159,12 +167,16 @@ export default function Home() {
         rating
       }])
       if (error) throw error
+
       setStatus('Summary saved!')
       setGeneratedSummary(null)
       setHoverRating(0)
       fetchSummaries()
     } catch (err: any) {
-      setStatus('Save failed: ' + (err?.message || String(err)))
+      console.error('saveRatedSummary error', err)
+      setStatus('Could not save summary: ' + (err?.message || String(err)))
+    } finally {
+      setIsSavingRating(false)
     }
   }
 
@@ -278,7 +290,7 @@ export default function Home() {
               {isGenerating ? 'Generating...' : 'Generate Summary'}
             </button>
           </div>
-          <div className="text-xs text-slate-500 mt-2">Generate a motivational daily summary from your entries, then rate or discard it.</div>
+          <div className="text-xs text-slate-500 mt-2">Generate a motivational daily summary from your entries, then rate or discard it. Rating saves the summary to your "Your Summaries" list.</div>
         </div>
 
         {/* Generated Summary Card */}
@@ -287,7 +299,7 @@ export default function Home() {
             <div className="flex items-start justify-between">
               <div>
                 <div className="text-sm font-semibold">Generated 24-hour summary</div>
-                <div className="text-xs text-slate-500">Read it, then rate it (1–5) to save or discard it permanently.</div>
+                <div className="text-xs text-slate-500">Read it, then rate it (1–5) to save. If you don't like it, discard it — it won't be saved.</div>
               </div>
               <button onClick={() => { setGeneratedSummary(null); setStatus(null); setHoverRating(0) }} className="text-xs text-slate-400 underline">Dismiss</button>
             </div>
@@ -295,8 +307,9 @@ export default function Home() {
             <div className="mt-3 p-3 rounded-md bg-slate-50 text-slate-800 whitespace-pre-wrap">{generatedSummary}</div>
 
             <div className="mt-3 flex flex-wrap items-center gap-3">
-              <div className="text-sm text-slate-600">Rate this summary:</div>
-              <div className="flex items-center gap-1">
+              <div className="text-sm text-slate-600">Rate this summary (click a star to save):</div>
+
+              <div className="flex items-center gap-2">
                 {[1,2,3,4,5].map((n) => (
                   <button
                     key={n}
@@ -314,14 +327,18 @@ export default function Home() {
                     aria-label={`Rate ${n} star`}
                     className="text-2xl cursor-pointer select-none"
                     title={`${n} star`}
+                    disabled={isSavingRating}
+                    style={{ opacity: isSavingRating ? 0.5 : 1 }}
                   >
                     {n <= hoverRating ? '★' : '☆'}
                   </button>
                 ))}
               </div>
+
               <button
                 onClick={() => { setGeneratedSummary(null); setStatus('Summary discarded.'); setHoverRating(0) }}
                 className="ml-auto px-3 py-1 border rounded-md text-sm text-slate-600 bg-white"
+                disabled={isSavingRating}
               >
                 Discard
               </button>
