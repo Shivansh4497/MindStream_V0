@@ -589,7 +589,16 @@ export default function Home() {
           setStatus={setStatus}
           showToast={showToast}
         />
-
+        {/* Reflect on your day button */}
+        <div className="flex justify-center mb-6">
+          <button
+            onClick={generate24hSummary}
+            disabled={isGenerating}
+            className="px-5 py-2 rounded-md bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 transition-all"
+          >
+            {isGenerating ? 'Reflecting...' : 'Reflect on your day'}
+          </button>
+        </div>
         {/* AI generated summary preview / rating (rendered here when available) */}
         {generatedSummary && (
           <SummaryCard
