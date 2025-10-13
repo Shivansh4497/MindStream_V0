@@ -35,19 +35,17 @@ export default function EntryInput({
   const textareaElRef = useRef<HTMLTextAreaElement | null>(null)
 
   useEffect(() => {
-    // Focus textarea if present, otherwise focus input
-    if (textareaElRef.current) {
-      try {
-        textareaElRef.current.focus()
-      } catch {}
-      return
+    const el = textareaElRef.current || inputElRef.current
+    if (el) el.focus()
+
+  // lock focus: if user types, don’t lose it when layout changes
+    const handleBlur = () => {
+      requestAnimationFrame(() => el?.focus())
     }
-    if (inputElRef.current) {
-      try {
-        inputElRef.current.focus()
-      } catch {}
-    }
+    el?.addEventListener('blur', handleBlur)
+    return () => el?.removeEventListener('blur', handleBlur)
   }, [])
+
 
   const canSave = (finalText || '').trim().length > 0 && !isRecording
 
