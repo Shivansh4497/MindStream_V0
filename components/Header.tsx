@@ -22,8 +22,8 @@ export default function Header({
 }: HeaderProps) {
   return (
     <header className="mb-8">
-      {/* Grid with two columns: left = title, right = tray */}
-      <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_auto] gap-4 items-center">
+      {/* Grid with two columns: left = title (min width), right = tray */}
+      <div className="grid grid-cols-1 md:grid-cols-[360px_1fr] gap-4 items-start">
         {/* LEFT: Title + tagline */}
         <div className="min-w-0">
           <h1 className="text-3xl md:text-4xl font-bold text-indigo-900 leading-tight">Mindstream</h1>
@@ -31,7 +31,7 @@ export default function Header({
         </div>
 
         {/* RIGHT: Tray with Privacy / Streak / Auth */}
-        <div className="flex items-center justify-end gap-3 flex-wrap">
+        <div className="flex items-start justify-end gap-3 flex-wrap pt-1">
           {/* Privacy card */}
           <div className="flex-shrink-0 min-w-[220px]">
             <div className="rounded-xl border bg-white/60 p-3 shadow-sm">
