@@ -589,16 +589,27 @@ export default function Home() {
           setStatus={setStatus}
           showToast={showToast}
         />
-        {/* Reflect on your day button */}
-        <div className="flex justify-center mb-6">
+        {/* Reflect on your day button + gentle prompt */}
+        <div className="flex flex-col items-center mb-6 relative">
           <button
             onClick={generate24hSummary}
             disabled={isGenerating}
-            className="px-5 py-2 rounded-md bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 transition-all"
+            className={`px-5 py-2 rounded-md text-white transition-all duration-300 ${
+              isGenerating
+                ? 'bg-indigo-400 cursor-wait'
+                : 'bg-indigo-600 hover:bg-indigo-700'
+            } ${!isGenerating ? 'animate-shimmer' : ''}`}
           >
             {isGenerating ? 'Reflecting...' : 'Reflect on your day'}
           </button>
+
+          {showReflectPrompt && (
+            <div className="mt-3 text-sm text-slate-500 transition-opacity duration-700 ease-in-out animate-fadeIn">
+              ✨ Take a moment to reflect on your day.
+            </div>
+          )}
         </div>
+
         {/* AI generated summary preview / rating (rendered here when available) */}
         {generatedSummary && (
           <SummaryCard
