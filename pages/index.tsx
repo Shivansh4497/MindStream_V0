@@ -325,6 +325,26 @@ export default function Home() {
       setIsHeaderVisible(true)
     }, 4000)
   }
+/* ---------------- Gentle reflection prompt (idle hint) ---------------- */
+  const [showReflectPrompt, setShowReflectPrompt] = useState(false)
+
+  useEffect(() => {
+    const idleTimer = setTimeout(() => {
+      setShowReflectPrompt(true)
+    }, 10000) // show after 10s idle
+
+    const resetIdle = () => setShowReflectPrompt(false)
+    window.addEventListener('keydown', resetIdle)
+    window.addEventListener('mousemove', resetIdle)
+    window.addEventListener('click', resetIdle)
+
+    return () => {
+      clearTimeout(idleTimer)
+      window.removeEventListener('keydown', resetIdle)
+      window.removeEventListener('mousemove', resetIdle)
+      window.removeEventListener('click', resetIdle)
+    }
+  }, [finalText, entries])
 
   /* ---------------- Voice recognition (hold to record) ---------------- */
   useEffect(() => {
