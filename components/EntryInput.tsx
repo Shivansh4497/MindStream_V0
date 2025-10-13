@@ -30,13 +30,21 @@ export default function EntryInput({
   setStatus,
   showToast
 }: EntryInputProps) {
-  const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null)
+  // Separate refs for input and textarea to satisfy React/TSX typing
+  const inputElRef = useRef<HTMLInputElement | null>(null)
+  const textareaElRef = useRef<HTMLTextAreaElement | null>(null)
 
   useEffect(() => {
-    if (inputRef.current) {
+    // Focus textarea if present, otherwise focus input
+    if (textareaElRef.current) {
       try {
-        // focus if available
-        ;(inputRef.current as HTMLElement).focus()
+        textareaElRef.current.focus()
+      } catch {}
+      return
+    }
+    if (inputElRef.current) {
+      try {
+        inputElRef.current.focus()
       } catch {}
     }
   }, [])
@@ -48,7 +56,7 @@ export default function EntryInput({
       <div className="flex gap-3 items-start">
         {finalText ? (
           <textarea
-            ref={inputRef}
+            ref={textareaElRef}
             value={finalText}
             onChange={(e) => setFinalText(e.target.value)}
             rows={4}
@@ -58,7 +66,7 @@ export default function EntryInput({
           />
         ) : (
           <input
-            ref={inputRef}
+            ref={inputElRef}
             value={finalText}
             onChange={(e) => setFinalText(e.target.value)}
             className="flex-1 rounded-md border px-4 py-3 shadow-sm text-[15px]"
