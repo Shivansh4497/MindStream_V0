@@ -5,7 +5,6 @@ import Header from '../components/Header'
 import EntryInput from '../components/EntryInput'
 import ToastContainer from '../components/ToastContainer'
 import SummaryCard from '../components/SummaryCard'
-
 import {
   previewText as previewTextUtil,
   markDownLike as markDownLikeUtil,
@@ -14,7 +13,6 @@ import {
   randomAffirmation
 } from '../lib/ui'
 
-
 declare global {
   interface Window {
     webkitSpeechRecognition?: any
@@ -22,7 +20,7 @@ declare global {
   }
 }
 
-/* ---------------- Types ---------------- */
+/* ---------------- Lightweight types (informational only) ---------------- */
 type EntryRow = {
   id: string
   content: string
@@ -42,19 +40,19 @@ type SummaryRow = {
   range_end?: string
 }
 
-/* ---------------- UI helpers (reused names for compatibility) ---------------- */
+/* ---------------- small helpers (alias original utils) ---------------- */
 const previewText = previewTextUtil
 const markDownLike = markDownLikeUtil
 const formatDateForGroup = formatDateForGroupUtil
 const renderStarsInline = renderStarsInlineUtil
 
-/* ---------------- Toast (simple) ---------------- */
+/* ---------------- Inline Toast component ---------------- */
 function Toast({ text, kind = 'info' }: { text: string; kind?: 'info' | 'success' | 'error' }) {
   const bg = kind === 'success' ? 'bg-teal-600' : kind === 'error' ? 'bg-rose-600' : 'bg-slate-700'
   return <div className={`text-white ${bg} px-3 py-2 rounded-md shadow-md text-sm`}>{text}</div>
 }
 
-/* ---------------- Confirm Modal (inline) ---------------- */
+/* ---------------- Confirm modal (kept minimal here; expanded in part 2) ---------------- */
 function ConfirmModal({
   open,
   title,
@@ -96,23 +94,24 @@ function ConfirmModal({
   )
 }
 
-/* ---------------- Main component ---------------- */
+/* ---------------- Main Page ---------------- */
 export default function Home() {
-  /* Auth & status */
+  /* ---------------- Auth & global UI state ---------------- */
   const [user, setUser] = useState<{ id: string; email?: string } | null>(null)
   const [email, setEmail] = useState('')
   const [status, setStatus] = useState<string | null>(null)
   const [toast, setToast] = useState<{ text: string; kind?: 'info' | 'success' | 'error' } | null>(null)
+
+  /* Header fade + typing handling */
   const [isHeaderVisible, setIsHeaderVisible] = useState(true)
   const typingTimeout = useRef<NodeJS.Timeout | null>(null)
 
-  /* Data */
+  /* ---------------- Data sets ---------------- */
   const [entries, setEntries] = useState<EntryRow[]>([])
   const [summaries, setSummaries] = useState<SummaryRow[]>([])
   const [streakCount, setStreakCount] = useState<number>(0)
 
-
-  /* Generated summary & state */
+  /* Generated summary state */
   const [generatedSummary, setGeneratedSummary] = useState<string | null>(null)
   const [generatedAt, setGeneratedAt] = useState<string | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
@@ -121,11 +120,11 @@ export default function Home() {
   /* Voice transcription */
   const [isRecording, setIsRecording] = useState(false)
   const [interim, setInterim] = useState('')
-  const [finalText, setFinalText] = useState('') // used for both typed text & transcript edit
+  const [finalText, setFinalText] = useState('') // typed / transcript buffer
   const recogRef = useRef<any>(null)
   const holdingRef = useRef(false)
 
-  /* UI */
+  /* UI helpers */
   const [hoverRating, setHoverRating] = useState<number>(0)
   const [expandedSummaryId, setExpandedSummaryId] = useState<string | null>(() => {
     try {
@@ -146,10 +145,8 @@ export default function Home() {
   const [confirmTitle, setConfirmTitle] = useState('')
   const [confirmDesc, setConfirmDesc] = useState<string | undefined>(undefined)
   const confirmActionRef = useRef<() => Promise<void> | void>(() => {})
-  // track which item (id) is pending delete (useful for optimistic UI)
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
 
-  /* refs */
   const summariesRef = useRef<HTMLDivElement | null>(null)
 
   /* small util: showToast */
@@ -158,7 +155,7 @@ export default function Home() {
     window.setTimeout(() => setToast(null), ms)
   }
 
-  /* ---------------- Auth + load ---------------- */
+  /* ---------------- Auth + initial load ---------------- */
   useEffect(() => {
     const load = async () => {
       const { data } = await supabase.auth.getUser()
@@ -198,7 +195,7 @@ export default function Home() {
     showToast('Signed out', 'info')
   }
 
-  /* ---------------- Entries CRUD ---------------- */
+  /* ---------------- CRUD: Entries ---------------- */
   const fetchEntries = async () => {
     try {
       const { data: u } = await supabase.auth.getUser()
@@ -221,46 +218,6 @@ export default function Home() {
     }
   }
 
-
-  const fetchStreak = async () => {
-    try {
-      const { data: u } = await supabase.auth.getUser()
-      const uid = u?.user?.id
-      if (!uid) return
-      const { data, error } = await supabase
-        .from('user_stats')
-        .select('streak_count')
-        .eq('user_id', uid)
-        .single()
-      if (!error && data) setStreakCount(data.streak_count || 0)
-    } catch (err) {
-        console.error('fetchStreak error', err)
-      }
-    }
-
-  // Handle header fade when typing
-  const hasStartedTyping = useRef(false)
-
-  const handleTyping = () => {
-  // only hide header after 1st second of typing (avoids immediate reflow)
-    if (!hasStartedTyping.current) {
-      hasStartedTyping.current = true
-      if (typingTimeout.current) clearTimeout(typingTimeout.current)
-      typingTimeout.current = setTimeout(() => {
-        setIsHeaderVisible(false)
-      }, 1000)
-    }
-
-  // reset fade timer
-    if (typingTimeout.current) clearTimeout(typingTimeout.current)
-    typingTimeout.current = setTimeout(() => {
-      setIsHeaderVisible(true)
-      hasStartedTyping.current = false
-    }, 5000)
-  }
-
-
-  
   const saveTextEntry = async (text: string, source = 'text') => {
     try {
       const { data: u } = await supabase.auth.getUser()
@@ -290,15 +247,13 @@ export default function Home() {
       await fetchEntries()
 
       // fade out highlight after a moment
-        setTimeout(() => setRecentlyAddedId(null), 2000)
-
+      setTimeout(() => setRecentlyAddedId(null), 2000)
     } catch (err: any) {
       console.error('saveTextEntry', err)
       showToast('Save failed: ' + (err?.message || String(err)), 'error')
     }
   }
 
-  /* delete entry with confirm modal */
   const confirmDeleteEntry = (entryId: string) => {
     setConfirmTitle('Delete entry')
     setConfirmDesc('Permanently delete this entry? This action cannot be undone.')
@@ -321,7 +276,7 @@ export default function Home() {
     setConfirmOpen(true)
   }
 
-  /* ---------------- Summaries CRUD ---------------- */
+  /* ---------------- CRUD: Summaries (fetch) ---------------- */
   const fetchSummaries = async () => {
     try {
       const { data: u } = await supabase.auth.getUser()
@@ -344,153 +299,31 @@ export default function Home() {
     }
   }
 
-  async function generate24hSummary() {
+  /* ---------------- Streak fetch ---------------- */
+  const fetchStreak = async () => {
     try {
-      setIsGenerating(true)
-      setStatus('Loading recent entries...')
-      const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
-      const { data: entries24, error } = await supabase
-        .from('entries')
-        .select('id, content, created_at, source')
-        .gte('created_at', since)
-        .order('created_at', { ascending: true })
-      if (error) throw error
-      if (!entries24?.length) {
-        showToast('No entries in the past 24 hours', 'info')
-        return
-      }
-
-      setStatus('Generating reflection — please wait...')
-      const resp = await fetch('/api/generate-summary', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ entries: entries24 })
-      })
-      const payload = await resp.json()
-      if (!resp.ok) {
-        console.error('generate error payload', payload)
-        showToast('Couldn’t generate reflection right now', 'error')
-        return
-      }
-      setGeneratedSummary(payload.summary)
-      setGeneratedAt(new Date().toISOString())
-      showToast('Reflection ready', 'success')
-    } catch (err: any) {
-      console.error('generate24hSummary', err)
-      showToast('Generation failed', 'error')
-    } finally {
-      setIsGenerating(false)
-    }
-  }
-
-  async function saveRatedSummary(rating: number) {
-    if (!generatedSummary) return
-    try {
-      setIsSavingRating(true)
-      setStatus('Saving reflection...')
       const { data: u } = await supabase.auth.getUser()
-      let uid = u?.user?.id
-      if (!uid) {
-        const { data: sess } = await supabase.auth.getSession()
-        uid = (sess as any)?.session?.user?.id
-      }
-      if (!uid) {
-        showToast('Please sign in to save the reflection', 'info')
-        setIsSavingRating(false)
-        return
-      }
-      const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
-      const upto = new Date().toISOString()
-      const todayIso = new Date().toISOString().slice(0, 10)
-
-      const insertResp = await supabase
-        .from('summaries')
-        .insert([
-          {
-            user_id: uid,
-            range_start: since,
-            range_end: upto,
-            for_date: todayIso,
-            summary_text: generatedSummary,
-            rating
-          }
-        ])
-        .select('*')
-      const { data: inserted, error } = insertResp as any
-      if (error) throw error
-      const newRow = Array.isArray(inserted) && inserted.length ? inserted[0] : null
-      if (newRow) {
-        setSummaries((prev) => [newRow, ...prev])
-        setRecentlyAddedId(newRow.id)
-        setExpandedSummaryId(newRow.id)
-        // collapse & remove highlight after a moment
-        setTimeout(() => {
-          setExpandedSummaryId(null)
-          setRecentlyAddedId(null)
-        }, 2600)
-      } else {
-        await fetchSummaries()
-      }
-      setGeneratedSummary(null)
-      setGeneratedAt(null)
-      setHoverRating(0)
-      try {
-        await fetch('/api/user-stats', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ user_id: uid, for_date: todayIso })
-        })
-      } catch (err) {
-        console.warn('streak update failed', err)
-      }
-      setTimeout(() => {
-        const el = document.getElementById('your-summaries-section')
-        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      }, 250)
-      try {
-        await fetch('/api/user-stats', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ user_id: uid, for_date: todayIso })
-        })
-        await fetchStreak()
-      } catch (err) {
-        console.warn('streak update failed', err)
-      }
-
-      // scroll
-      setTimeout(() => {
-        const el = document.getElementById('your-summaries-section')
-        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      }, 250)
-    } catch (err: any) {
-      console.error('saveRatedSummary error', err)
-      showToast('Could not save reflection: ' + (err?.message || String(err)), 'error')
-    } finally {
-      setIsSavingRating(false)
+      const uid = u?.user?.id
+      if (!uid) return
+      const { data, error } = await supabase
+        .from('user_stats')
+        .select('streak_count')
+        .eq('user_id', uid)
+        .single()
+      if (!error && data) setStreakCount(data.streak_count || 0)
+    } catch (err) {
+      console.error('fetchStreak error', err)
     }
   }
 
-  /* delete summary with confirm */
-  const confirmDeleteSummary = (summaryId: string) => {
-    setConfirmTitle('Delete reflection')
-    setConfirmDesc('Permanently delete this reflection? This action cannot be undone.')
-    confirmActionRef.current = async () => {
-      setPendingDeleteId(summaryId)
-      setSummaries((prev) => prev.filter((s) => s.id !== summaryId))
-      try {
-        const { error } = await supabase.from('summaries').delete().eq('id', summaryId)
-        if (error) throw error
-        showToast('Reflection deleted', 'info')
-      } catch (err: any) {
-        console.error('delete summary failed', err)
-        showToast('Could not delete reflection: ' + (err?.message || String(err)), 'error')
-        await fetchSummaries()
-      } finally {
-        setPendingDeleteId(null)
-      }
-    }
-    setConfirmOpen(true)
+  /* ---------------- Header fade when typing ---------------- */
+  function handleTyping() {
+    // hide header immediately and show it after idle
+    setIsHeaderVisible(false)
+    if (typingTimeout.current) clearTimeout(typingTimeout.current)
+    typingTimeout.current = setTimeout(() => {
+      setIsHeaderVisible(true)
+    }, 4000)
   }
 
   /* ---------------- Voice recognition (hold to record) ---------------- */
@@ -576,53 +409,157 @@ export default function Home() {
     showToast('Transcription ready — edit and press Save', 'info')
   }
 
-  /* expand toggle */
-  const toggleExpand = (id: string) => {
-    setExpandedSummaryId((cur) => (cur === id ? null : id))
-  }
-
-  /* grouping (for display) */
-  const groupedSummaries = summaries.reduce<Record<string, SummaryRow[]>>((acc, s) => {
-    const groupKey = formatDateForGroup(s.for_date || s.created_at)
-    if (!acc[groupKey]) acc[groupKey] = []
-    acc[groupKey].push(s)
-    return acc
-  }, {})
-
-  /* Confirm modal handlers */
-  const runConfirmAction = async () => {
-    setConfirmOpen(false)
+  /* ---------------- Generate 24h AI summary ---------------- */
+  async function generate24hSummary() {
     try {
-      await (confirmActionRef.current() as Promise<void> | void)
-    } catch (err) {
-      console.error('confirm action error', err)
+      setIsGenerating(true)
+      setStatus('Loading recent entries...')
+      const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+      const { data: entries24, error } = await supabase
+        .from('entries')
+        .select('id, content, created_at, source')
+        .gte('created_at', since)
+        .order('created_at', { ascending: true })
+      if (error) throw error
+      if (!entries24?.length) {
+        showToast('No entries in the past 24 hours', 'info')
+        return
+      }
+
+      setStatus('Generating reflection — please wait...')
+      const resp = await fetch('/api/generate-summary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entries: entries24 })
+      })
+      const payload = await resp.json()
+      if (!resp.ok) {
+        console.error('generate error payload', payload)
+        showToast('Couldn’t generate reflection right now', 'error')
+        return
+      }
+      setGeneratedSummary(payload.summary)
+      setGeneratedAt(new Date().toISOString())
+      showToast('Reflection ready', 'success')
+    } catch (err: any) {
+      console.error('generate24hSummary', err)
+      showToast('Generation failed', 'error')
+    } finally {
+      setIsGenerating(false)
     }
   }
-  const cancelConfirm = () => setConfirmOpen(false)
 
-  /* ---------------- UI ---------------- */
+  /* ---------------- Save rated summary (persist reflection) ---------------- */
+  async function saveRatedSummary(rating: number) {
+    if (!generatedSummary) return
+    try {
+      setIsSavingRating(true)
+      setStatus('Saving reflection...')
+      const { data: u } = await supabase.auth.getUser()
+      let uid = u?.user?.id
+      if (!uid) {
+        const { data: sess } = await supabase.auth.getSession()
+        uid = (sess as any)?.session?.user?.id
+      }
+      if (!uid) {
+        showToast('Please sign in to save the reflection', 'info')
+        setIsSavingRating(false)
+        return
+      }
+      const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+      const upto = new Date().toISOString()
+      const todayIso = new Date().toISOString().slice(0, 10)
+
+      const insertResp = await supabase
+        .from('summaries')
+        .insert([
+          {
+            user_id: uid,
+            range_start: since,
+            range_end: upto,
+            for_date: todayIso,
+            summary_text: generatedSummary,
+            rating
+          }
+        ])
+        .select('*')
+      const { data: inserted, error } = insertResp as any
+      if (error) throw error
+      const newRow = Array.isArray(inserted) && inserted.length ? inserted[0] : null
+      if (newRow) {
+        setSummaries((prev) => [newRow, ...prev])
+        setRecentlyAddedId(newRow.id)
+        setExpandedSummaryId(newRow.id)
+        // collapse & remove highlight after a moment
+        setTimeout(() => {
+          setExpandedSummaryId(null)
+          setRecentlyAddedId(null)
+        }, 2600)
+      } else {
+        await fetchSummaries()
+      }
+      setGeneratedSummary(null)
+      setGeneratedAt(null)
+      setHoverRating(0)
+
+      // update streak server-side (best-effort)
+      try {
+        await fetch('/api/user-stats', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: uid, for_date: todayIso })
+        })
+      } catch (err) {
+        console.warn('streak update failed', err)
+      }
+
+      // re-fetch streak
+      try {
+        await fetchStreak()
+      } catch (err) {}
+
+      // scroll to summaries section after short delay
+      setTimeout(() => {
+        const el = document.getElementById('your-summaries-section')
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }, 250)
+    } catch (err: any) {
+      console.error('saveRatedSummary error', err)
+      showToast('Could not save reflection: ' + (err?.message || String(err)), 'error')
+    } finally {
+      setIsSavingRating(false)
+    }
+  }
+
+  /* ---------- end of Part 1 - remaining rendering & delete flows in Part 2 ---------- */
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-indigo-50 to-white p-8">
       <ToastContainer toast={toast} />
 
-      {/* Confirm modal */}
+      {/* Confirm modal (rendered in Part 2 with full handlers) */}
       <ConfirmModal
         open={confirmOpen}
         title={confirmTitle}
         description={confirmDesc}
         confirmLabel="Delete"
         cancelLabel="Cancel"
-        onConfirm={runConfirmAction}
-        onCancel={cancelConfirm}
+        onConfirm={async () => {
+          setConfirmOpen(false)
+          try {
+            await (confirmActionRef.current() as Promise<void> | void)
+          } catch (err) {
+            console.error('confirm action error', err)
+          }
+        }}
+        onCancel={() => setConfirmOpen(false)}
       />
 
       <main className="mx-auto w-full max-w-3xl">
-        {/* Header (componentized) */}
+        {/* Header (fades away while typing) */}
         <div
           className={`overflow-hidden transition-all duration-700 ease-in-out ${
-            isHeaderVisible
-              ? 'opacity-100 translate-y-0 max-h-[500px]'
-              : 'opacity-0 -translate-y-3 pointer-events-none max-h-0'
+            isHeaderVisible ? 'opacity-100 translate-y-0 max-h-[520px]' : 'opacity-0 -translate-y-3 pointer-events-none max-h-0'
           }`}
         >
           <Header
@@ -636,8 +573,7 @@ export default function Home() {
           />
         </div>
 
-
-        {/* Input & recording (componentized) */}
+        {/* Input & recording */}
         <EntryInput
           finalText={finalText}
           setFinalText={(text) => {
@@ -654,7 +590,7 @@ export default function Home() {
           showToast={showToast}
         />
 
-        {/* Generated Summary (preview -> rate) */}
+        {/* AI generated summary preview / rating (rendered here when available) */}
         {generatedSummary && (
           <SummaryCard
             summary={generatedSummary}
@@ -672,26 +608,33 @@ export default function Home() {
           />
         )}
 
-
+        {/* Entries list & summaries will be rendered in Part 2 */}
         {/* Entries list */}
         <section className="space-y-4 mb-12">
           <div className="text-sm text-slate-500">Your Reflections</div>
           <div className="rounded-lg bg-white p-4 border shadow-sm">
-            {entries.length === 0 && <div className="text-slate-700">Your thoughts will appear here once you start speaking or typing.</div>}
-            {entries.length > 0 && (
+            {entries.length === 0 ? (
+              <div className="text-slate-700">
+                Your thoughts will appear here once you start speaking or typing.
+              </div>
+            ) : (
               <ul className="space-y-3">
                 {entries.map((e) => (
                   <li
-                  key={e.id}
+                    key={e.id}
                     className={`p-3 border rounded-md bg-white flex justify-between items-start ${
-                      recentlyAddedId === e.id ? 'pulse-ring ring-2 ring-teal-200' : ''
+                      recentlyAddedId === e.id ? 'ring-2 ring-teal-200' : ''
                     }`}
                   >
-
                     <div className="flex-1 pr-4">
-                      <div className="text-slate-800 whitespace-pre-wrap">{e.content}</div>
-                      <div className="mt-2 text-xs text-slate-400">{new Date(e.created_at || Date.now()).toLocaleString()}</div>
+                      <div className="text-slate-800 whitespace-pre-wrap">
+                        {e.content}
+                      </div>
+                      <div className="mt-2 text-xs text-slate-400">
+                        {new Date(e.created_at || Date.now()).toLocaleString()}
+                      </div>
                     </div>
+
                     <div className="flex flex-col items-end gap-2">
                       <button
                         onClick={() => confirmDeleteEntry(e.id)}
@@ -709,17 +652,37 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Summaries list grouped by date */}
-        <section id="your-summaries-section" ref={summariesRef as any} className="space-y-6 mb-16">
+        {/* Summaries grouped by date */}
+        <section
+          id="your-summaries-section"
+          ref={summariesRef as any}
+          className="space-y-6 mb-16"
+        >
           <div className="text-sm text-slate-500">Your Summaries</div>
           <div className="rounded-lg bg-white p-4 border shadow-sm space-y-6">
-            {Object.keys(groupedSummaries).length === 0 && <div className="text-slate-700">No summaries yet — generate one above.</div>}
+            {summaries.length === 0 && (
+              <div className="text-slate-700">
+                No summaries yet — generate one above.
+              </div>
+            )}
 
-            {Object.entries(groupedSummaries).map(([group, items]) => (
-              <div key={group}>
-                <div className="text-xs text-slate-400 mb-2">{group}</div>
+            {/* Group summaries by for_date */}
+            {Object.entries(
+              summaries.reduce((acc: Record<string, SummaryRow[]>, s) => {
+                const key =
+                  s.for_date ||
+                  (s.created_at
+                    ? new Date(s.created_at).toLocaleDateString()
+                    : 'Other')
+                if (!acc[key]) acc[key] = []
+                acc[key].push(s)
+                return acc
+              }, {})
+            ).map(([dateKey, list]) => (
+              <div key={dateKey}>
+                <div className="text-xs text-slate-400 mb-2">{dateKey}</div>
                 <ul className="space-y-3">
-                  {items.map((s) => {
+                  {list.map((s) => {
                     const isExpanded = expandedSummaryId === s.id
                     const preview = previewText(s.summary_text || '', 220)
                     const highlight = recentlyAddedId === s.id
@@ -727,17 +690,33 @@ export default function Home() {
                       <li
                         key={s.id}
                         className={`rounded-md border bg-white overflow-hidden transition-shadow ${
-                          highlight ? 'ring-2 ring-teal-200 pulse-ring' : ''
+                          highlight ? 'ring-2 ring-teal-200' : ''
                         }`}
                       >
                         <div className="p-4 flex items-start gap-4">
                           <div className="flex-1">
-                            <div className="text-sm text-slate-800 leading-snug line-clamp-4">{preview}</div>
+                            <div className="text-sm text-slate-800 leading-snug line-clamp-4">
+                              {preview}
+                            </div>
                             <div className="mt-2 text-xs text-slate-400 flex items-center gap-3">
-                              <span>{s.for_date ?? (s.created_at ? new Date(s.created_at).toLocaleDateString() : '')}</span>
-                              <span className="text-yellow-500" dangerouslySetInnerHTML={{ __html: renderStarsInline(s.rating) }} />
+                              <span>
+                                {s.for_date ??
+                                  (s.created_at
+                                    ? new Date(
+                                        s.created_at
+                                      ).toLocaleDateString()
+                                    : '')}
+                              </span>
+                              <span
+                                className="text-yellow-500"
+                                dangerouslySetInnerHTML={{
+                                  __html: renderStarsInline(s.rating),
+                                }}
+                              />
                               <span className="text-slate-400">·</span>
-                              <span className="text-slate-500 text-xs"> {s.summary_text?.length ?? 0} chars</span>
+                              <span className="text-slate-500 text-xs">
+                                {s.summary_text?.length ?? 0} chars
+                              </span>
                             </div>
                           </div>
 
@@ -746,23 +725,79 @@ export default function Home() {
                               <button
                                 aria-expanded={isExpanded}
                                 aria-controls={`summary-body-${s.id}`}
-                                onClick={() => toggleExpand(s.id)}
+                                onClick={() =>
+                                  setExpandedSummaryId((cur) =>
+                                    cur === s.id ? null : s.id
+                                  )
+                                }
                                 onKeyDown={(e) => {
                                   if (e.key === 'Enter' || e.key === ' ') {
                                     e.preventDefault()
-                                    toggleExpand(s.id)
+                                    setExpandedSummaryId((cur) =>
+                                      cur === s.id ? null : s.id
+                                    )
                                   }
                                 }}
                                 className="p-3 min-w-[44px] min-h-[44px] rounded-md border bg-white hover:bg-indigo-50"
-                                title={isExpanded ? 'Collapse summary' : 'Expand summary'}
+                                title={
+                                  isExpanded
+                                    ? 'Collapse summary'
+                                    : 'Expand summary'
+                                }
                               >
-                                <svg className={`w-5 h-5 transform transition-transform ${isExpanded ? 'rotate-180' : 'rotate-0'}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                <svg
+                                  className={`w-5 h-5 transform transition-transform ${
+                                    isExpanded ? 'rotate-180' : 'rotate-0'
+                                  }`}
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M19 9l-7 7-7-7"
+                                  />
                                 </svg>
                               </button>
 
                               <button
-                                onClick={() => confirmDeleteSummary(s.id)}
+                                onClick={() => {
+                                  setConfirmTitle('Delete reflection')
+                                  setConfirmDesc(
+                                    'Permanently delete this reflection? This action cannot be undone.'
+                                  )
+                                  confirmActionRef.current = async () => {
+                                    setPendingDeleteId(s.id)
+                                    setSummaries((prev) =>
+                                      prev.filter((x) => x.id !== s.id)
+                                    )
+                                    try {
+                                      const { error } = await supabase
+                                        .from('summaries')
+                                        .delete()
+                                        .eq('id', s.id)
+                                      if (error) throw error
+                                      showToast('Reflection deleted', 'info')
+                                    } catch (err: any) {
+                                      console.error(
+                                        'delete summary failed',
+                                        err
+                                      )
+                                      showToast(
+                                        'Could not delete reflection: ' +
+                                          (err?.message || String(err)),
+                                        'error'
+                                      )
+                                      await fetchSummaries()
+                                    } finally {
+                                      setPendingDeleteId(null)
+                                    }
+                                  }
+                                  setConfirmOpen(true)
+                                }}
                                 className="text-xl px-2 py-1 rounded-md hover:bg-rose-50"
                                 title="Delete reflection"
                                 aria-label="Delete reflection"
@@ -773,20 +808,44 @@ export default function Home() {
                           </div>
                         </div>
 
+                        {/* Expanded body */}
                         <div
                           id={`summary-body-${s.id}`}
                           className="px-4 pb-4 transition-[max-height,opacity] duration-300 ease-in-out overflow-hidden"
-                          style={{ maxHeight: isExpanded ? '1200px' : '0px', opacity: isExpanded ? 1 : 0 }}
+                          style={{
+                            maxHeight: isExpanded ? '1200px' : '0px',
+                            opacity: isExpanded ? 1 : 0,
+                          }}
                           role="region"
                           aria-hidden={!isExpanded}
                         >
                           <div className="mt-2 text-slate-800 leading-relaxed whitespace-pre-wrap">
-                            <div dangerouslySetInnerHTML={{ __html: markDownLike(s.summary_text) }} />
+                            <div
+                              dangerouslySetInnerHTML={{
+                                __html: markDownLike(s.summary_text),
+                              }}
+                            />
                           </div>
 
                           <div className="mt-3 flex items-center justify-between">
-                            <div className="text-xs text-slate-400">Saved {s.for_date ?? (s.created_at ? new Date(s.created_at).toLocaleString() : '')}</div>
-                            <div className="text-sm text-slate-600">Your rating: <span className="text-yellow-500" dangerouslySetInnerHTML={{ __html: renderStarsInline(s.rating) }} /></div>
+                            <div className="text-xs text-slate-400">
+                              Saved{' '}
+                              {s.for_date ??
+                                (s.created_at
+                                  ? new Date(
+                                      s.created_at
+                                    ).toLocaleString()
+                                  : '')}
+                            </div>
+                            <div className="text-sm text-slate-600">
+                              Your rating:{' '}
+                              <span
+                                className="text-yellow-500"
+                                dangerouslySetInnerHTML={{
+                                  __html: renderStarsInline(s.rating),
+                                }}
+                              />
+                            </div>
                           </div>
                         </div>
                       </li>
@@ -806,16 +865,13 @@ export default function Home() {
         )}
 
         {/* Screen reader-only live region */}
-        <div
-          aria-live="polite"
-          aria-atomic="true"
-          className="sr-only"
-        >
-            {status}
+        <div aria-live="polite" aria-atomic="true" className="sr-only">
+          {status}
         </div>
 
-        <footer className="mt-8 text-xs text-slate-400">Private • Encrypted • Yours</footer>
-
+        <footer className="mt-8 text-xs text-slate-400">
+          Private • Encrypted • Yours
+        </footer>
       </main>
     </div>
   )
