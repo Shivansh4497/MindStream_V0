@@ -239,14 +239,26 @@ export default function Home() {
     }
 
   // Handle header fade when typing
+  const hasStartedTyping = useRef(false)
+
   const handleTyping = () => {
-    if (!isHeaderVisible) return
-    setIsHeaderVisible(false)
+  // only hide header after 1st second of typing (avoids immediate reflow)
+    if (!hasStartedTyping.current) {
+      hasStartedTyping.current = true
+      if (typingTimeout.current) clearTimeout(typingTimeout.current)
+      typingTimeout.current = setTimeout(() => {
+        setIsHeaderVisible(false)
+      }, 1000)
+    }
+
+  // reset fade timer
     if (typingTimeout.current) clearTimeout(typingTimeout.current)
     typingTimeout.current = setTimeout(() => {
       setIsHeaderVisible(true)
-    }, 5000) // show header again after 5s idle
+      hasStartedTyping.current = false
+    }, 5000)
   }
+
 
   
   const saveTextEntry = async (text: string, source = 'text') => {
@@ -607,8 +619,10 @@ export default function Home() {
       <main className="mx-auto w-full max-w-3xl">
         {/* Header (componentized) */}
         <div
-          className={`transition-all duration-700 ease-in-out ${
-            isHeaderVisible ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-3 pointer-events-none'
+          className={`overflow-hidden transition-all duration-700 ease-in-out ${
+            isHeaderVisible
+              ? 'opacity-100 translate-y-0 max-h-[500px]'
+              : 'opacity-0 -translate-y-3 pointer-events-none max-h-0'
           }`}
         >
           <Header
@@ -621,6 +635,7 @@ export default function Home() {
             streakCount={streakCount}
           />
         </div>
+
 
         {/* Input & recording (componentized) */}
         <EntryInput
