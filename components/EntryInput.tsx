@@ -35,17 +35,18 @@ export default function EntryInput({
   const textareaElRef = useRef<HTMLTextAreaElement | null>(null)
 
   useEffect(() => {
+    // Focus the active input or textarea
     const el = textareaElRef.current || inputElRef.current
-    if (el) el.focus()
+    if (!el) return
+    el.focus()
 
-  // lock focus: if user types, don’t lose it when layout changes
+    // Keep focus locked — if blur happens due to layout change, refocus
     const handleBlur = () => {
-      requestAnimationFrame(() => el?.focus())
+      requestAnimationFrame(() => el.focus())
     }
-    el?.addEventListener('blur', handleBlur)
-    return () => el?.removeEventListener('blur', handleBlur)
-  }, [])
-
+    el.addEventListener('blur', handleBlur)
+    return () => el.removeEventListener('blur', handleBlur)
+  }, [finalText])
 
   const canSave = (finalText || '').trim().length > 0 && !isRecording
 
