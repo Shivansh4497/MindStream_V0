@@ -1,12 +1,10 @@
 // pages/index.tsx
-import { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import Header from '../components/Header'
 import EntryInput from '../components/EntryInput'
 import ToastContainer from '../components/ToastContainer'
 import SummaryCard from '../components/SummaryCard'
-import React, { useRef, useEffect } from 'react'
-
 
 import {
   previewText as previewTextUtil,
@@ -15,6 +13,7 @@ import {
   renderStarsInline as renderStarsInlineUtil,
   randomAffirmation
 } from '../lib/ui'
+
 
 declare global {
   interface Window {
