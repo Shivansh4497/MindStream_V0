@@ -1,6 +1,8 @@
 // components/EntryInput.tsx
 import React from 'react'
 import RecordingPulse from './RecordingPulse'
+import React, { useRef, useEffect } from 'react'
+
 
 type EntryInputProps = {
   finalText: string
@@ -30,13 +32,21 @@ export default function EntryInput({
   setStatus,
   showToast
 }: EntryInputProps) {
+  const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null)
+
+  useEffect(() => {
+    if (inputRef.current) inputRef.current.focus()
+  }, [])
+
   const canSave = (finalText || '').trim().length > 0 && !isRecording
+
 
   return (
     <div className="mb-8">
       <div className="flex gap-3 items-start">
         {finalText ? (
           <textarea
+            ref={inputRef}
             value={finalText}
             onChange={(e) => setFinalText(e.target.value)}
             rows={4}
@@ -46,6 +56,7 @@ export default function EntryInput({
           />
         ) : (
           <input
+            ref={inputRef}
             value={finalText}
             onChange={(e) => setFinalText(e.target.value)}
             className="flex-1 rounded-md border px-4 py-3 shadow-sm text-[15px]"
@@ -53,6 +64,7 @@ export default function EntryInput({
             aria-label="Quick thought input"
           />
         )}
+
 
         <div className="flex flex-col gap-2">
           <button
