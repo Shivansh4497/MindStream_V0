@@ -5,6 +5,7 @@ import Header from '../components/Header'
 import EntryInput from '../components/EntryInput'
 import ToastContainer from '../components/ToastContainer'
 import SummaryCard from '../components/SummaryCard'
+import React, { useRef, useEffect } from 'react'
 
 
 import {
@@ -103,6 +104,8 @@ export default function Home() {
   const [email, setEmail] = useState('')
   const [status, setStatus] = useState<string | null>(null)
   const [toast, setToast] = useState<{ text: string; kind?: 'info' | 'success' | 'error' } | null>(null)
+  const [isHeaderVisible, setIsHeaderVisible] = useState(true)
+  const typingTimeout = useRef<NodeJS.Timeout | null>(null)
 
   /* Data */
   const [entries, setEntries] = useState<EntryRow[]>([])
@@ -236,6 +239,15 @@ export default function Home() {
       }
     }
 
+  // Handle header fade when typing
+  const handleTyping = () => {
+    if (!isHeaderVisible) return
+    setIsHeaderVisible(false)
+    if (typingTimeout.current) clearTimeout(typingTimeout.current)
+    typingTimeout.current = setTimeout(() => {
+      setIsHeaderVisible(true)
+    }, 5000) // show header again after 5s idle
+  }
 
   
   const saveTextEntry = async (text: string, source = 'text') => {
@@ -595,20 +607,29 @@ export default function Home() {
 
       <main className="mx-auto w-full max-w-3xl">
         {/* Header (componentized) */}
-        <Header
-          user={user}
-          email={email}
-          setEmail={setEmail}
-          signOut={signOut}
-          sendMagicLink={sendMagicLink}
-          signInWithGoogle={signInWithGoogle}
-          streakCount={streakCount}
-        />
+        <div
+          className={`transition-all duration-700 ease-in-out ${
+            isHeaderVisible ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-3 pointer-events-none'
+          }`}
+        >
+          <Header
+            user={user}
+            email={email}
+            setEmail={setEmail}
+            signOut={signOut}
+            sendMagicLink={sendMagicLink}
+            signInWithGoogle={signInWithGoogle}
+            streakCount={streakCount}
+          />
+        </div>
 
         {/* Input & recording (componentized) */}
         <EntryInput
           finalText={finalText}
-          setFinalText={setFinalText}
+          setFinalText={(text) => {
+            setFinalText(text)
+            handleTyping()
+          }}
           interim={interim}
           isRecording={isRecording}
           startRecording={startRecording}
