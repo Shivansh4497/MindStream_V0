@@ -634,6 +634,23 @@ export default function Home() {
             </div>
           )}
         </div>
+        {/* DEBUG buttons */}
+        {generatedSummary && (
+          <div className="mb-3 flex gap-3">
+            <button
+              onClick={() => { console.log('[DEBUG] calling saveRatedSummary(5) directly'); saveRatedSummary(5).then(()=>console.log('[DEBUG] saveRatedSummary resolved')) }}
+              className="px-3 py-1 bg-emerald-500 text-white rounded-md text-sm"
+            >
+              DEBUG: saveRatedSummary(5)
+            </button>
+            <button
+              onClick={() => { console.log('[DEBUG] clearing generatedSummary'); setGeneratedSummary(null); setGeneratedAt(null) }}
+              className="px-3 py-1 bg-rose-400 text-white rounded-md text-sm"
+            >
+              DEBUG: clear generatedSummary
+            </button>
+          </div>
+        )}
 
         {/* AI generated summary preview / rating (rendered here when available) */}
         {generatedSummary && (
