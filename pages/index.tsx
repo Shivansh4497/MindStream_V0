@@ -471,7 +471,11 @@ export default function Home() {
 
   /* ---------------- Save rated summary (persist reflection) ---------------- */
   async function saveRatedSummary(rating: number) {
-    if (!generatedSummary) return
+    console.log('[index] saveRatedSummary START', { rating, generatedSummaryExists: !!generatedSummary })
+      if (!generatedSummary) {
+        console.warn('[index] saveRatedSummary aborted: no generatedSummary present')
+        return
+      }
     try {
       setIsSavingRating(true)
       setStatus('Saving reflection...')
@@ -549,6 +553,7 @@ export default function Home() {
     } finally {
       setIsSavingRating(false)
     }
+    console.log('[index] saveRatedSummary DONE — new summaries length:', summaries.length)
   }
 
   /* ---------- end of Part 1 - remaining rendering & delete flows in Part 2 ---------- */
@@ -641,6 +646,7 @@ export default function Home() {
             saveRatedSummary={saveRatedSummary}
             discardSummary={() => {
       // immediate synchronous clear to hide the card locally
+              console.log('[index] discardSummary called (user action)')
               setGeneratedSummary(null)
               setGeneratedAt(null)
               setStatus('Reflection discarded.')
