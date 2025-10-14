@@ -44,7 +44,7 @@ export default function SummaryCard({
   }
 
   return (
-    <div className="mb-8 rounded-lg border bg-gradient-to-b from-indigo-50/60 to-white p-5 shadow-md">
+    <div className="mb-8 relative z-10 rounded-lg border bg-gradient-to-b from-indigo-50/60 to-white p-5 shadow-md pointer-events-auto transition-opacity duration-300 ease-out">
       <div className="flex items-start justify-between">
         <div>
           <div className="text-sm font-semibold text-indigo-800">
