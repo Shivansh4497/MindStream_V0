@@ -44,3 +44,22 @@ body {
 .animate-fadeIn {
   animation: fadeIn 0.8s ease-in-out forwards;
 }
+/* === Mindstream Safe Pointer Layer Fix === */
+
+/* Ensure any visible card, button, or modal always accepts pointer events */
+*[class*="SummaryCard"],
+button,
+[role="button"],
+input,
+textarea {
+  pointer-events: auto !important;
+  position: relative;
+  z-index: 10;
+}
+
+/* Prevent invisible overlay divs from blocking clicks */
+div[style*="opacity: 0"],
+div[style*="max-height: 0"] {
+  pointer-events: none !important;
+}
+
