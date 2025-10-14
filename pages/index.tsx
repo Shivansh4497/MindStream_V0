@@ -640,6 +640,7 @@ export default function Home() {
             setHoverRating={setHoverRating}
             saveRatedSummary={saveRatedSummary}
             discardSummary={() => {
+      // immediate synchronous clear to hide the card locally
               setGeneratedSummary(null)
               setGeneratedAt(null)
               setStatus('Reflection discarded.')
@@ -647,6 +648,7 @@ export default function Home() {
             }}
           />
         )}
+
 
         {/* Entries list & summaries will be rendered in Part 2 */}
         {/* Entries list */}
