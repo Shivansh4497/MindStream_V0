@@ -5,6 +5,8 @@ import Header from '../components/Header'
 import EntryInput from '../components/EntryInput'
 import ToastContainer from '../components/ToastContainer'
 import SummaryCard from '../components/SummaryCard'
+import DebugOverlayHelper from '../components/DebugOverlayHelper'
+
 import {
   previewText as previewTextUtil,
   markDownLike as markDownLikeUtil,
@@ -561,6 +563,9 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-indigo-50 to-white p-8">
       <ToastContainer toast={toast} />
+      <ToastContainer toast={toast} />
+      <DebugOverlayHelper />
+
 
       {/* Confirm modal (rendered in Part 2 with full handlers) */}
       <ConfirmModal
