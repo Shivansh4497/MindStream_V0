@@ -150,7 +150,7 @@ export default function EntryInput(props: Props) {
 
   // Render: keeps the refined UI (capsule, rounded, safe-interactive)
   return (
-    <div className="ms-card ms-input-capsule p-5 relative transition-all" data-testid="entry-input">
+    <div className="ms-card ms-input-capsule relative transition-all" data-testid="entry-input">
       <div className="flex items-start gap-4">
         <textarea
           ref={textareaRef}
@@ -190,9 +190,7 @@ export default function EntryInput(props: Props) {
             disabled={effectiveSaving}
             aria-label="Hold to record"
             title="Hold to record"
-            className={`px-3 py-2 rounded-md text-sm border ms-focus-ring transition-colors ${
-              localRecording ? "bg-teal-100 border-teal-300 text-teal-700" : "bg-indigo-50 border-indigo-100 text-indigo-700 hover:bg-indigo-100"
-            }`}
+            className={`px-3 py-2 rounded-md text-sm border ms-focus-ring transition-transform duration-150 transform ${localRecording ? 'scale-95 bg-teal-100 ring-2 ring-teal-200 ms-mic-recording' : 'hover:scale-105 bg-indigo-50 border-indigo-100 text-indigo-700 hover:bg-indigo-100'}`}
           >
             {localRecording ? "●" : "🎙️"}
           </button>
