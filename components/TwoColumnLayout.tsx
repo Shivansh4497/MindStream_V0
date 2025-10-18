@@ -8,7 +8,7 @@ type Props = {
 
 export default function TwoColumnLayout({ left, right }: Props) {
   return (
-    <div className="container mx-auto px-6 lg:px-8 py-8">
+    <div className="py-8 px-4 lg:px-0">
       <div className="ms-two-col">
         <main className="space-y-6">
           {left}
