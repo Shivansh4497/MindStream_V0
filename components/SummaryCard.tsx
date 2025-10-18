@@ -5,21 +5,21 @@ import { markDownLike } from "../lib/ui";
 type SummaryCardProps = {
   summary: string;
   generatedAt?: string | null;
-  isSavingRating: boolean;
-  hoverRating: number;
-  setHoverRating: (n: number) => void;
-  saveRatedSummary: (rating: number) => Promise<void>;
-  discardSummary: () => void;
+  isSavingRating?: boolean;
+  hoverRating?: number;
+  setHoverRating?: (n: number) => void;
+  saveRatedSummary?: (rating: number) => Promise<void>;
+  discardSummary?: () => void;
 };
 
 export default function SummaryCard({
   summary,
   generatedAt,
-  isSavingRating,
-  hoverRating,
-  setHoverRating,
-  saveRatedSummary,
-  discardSummary,
+  isSavingRating = false,
+  hoverRating = 0,
+  setHoverRating = () => {},
+  saveRatedSummary = async () => {},
+  discardSummary = () => {},
 }: SummaryCardProps) {
   const [selectedRating, setSelectedRating] = useState<number | null>(null);
   const [localSaving, setLocalSaving] = useState(false);
@@ -51,7 +51,6 @@ export default function SummaryCard({
       className="ms-summary-card relative mb-8 p-6 transition-all duration-300 ease-out"
       aria-live="polite"
     >
-      {/* Header */}
       <div className="flex items-start justify-between">
         <div>
           <div className="text-sm font-semibold text-indigo-800 flex items-center gap-1">
@@ -77,7 +76,6 @@ export default function SummaryCard({
         </button>
       </div>
 
-      {/* Reflection Content */}
       <div
         className="mt-4 space-y-4 bg-white/90 rounded-md p-5 text-gray-800 leading-relaxed"
         style={{ pointerEvents: "none" }}
@@ -98,7 +96,6 @@ export default function SummaryCard({
         ))}
       </div>
 
-      {/* Actions */}
       <div
         className="absolute left-0 right-0 bottom-4 flex items-center justify-between px-6"
         style={{
@@ -106,20 +103,15 @@ export default function SummaryCard({
           pointerEvents: "auto",
         }}
       >
-        {/* Rating Stars */}
         <div className="flex items-center gap-3">
           <span className="text-sm text-gray-600">Rate:</span>
           {[1, 2, 3, 4, 5].map((n) => {
-            const filled = selectedRating
-              ? n <= selectedRating
-              : n <= (hoverRating || 0);
+            const filled = selectedRating ? n <= selectedRating : n <= (hoverRating || 0);
             return (
               <button
                 key={n}
                 type="button"
-                onClick={() =>
-                  setSelectedRating((cur) => (cur === n ? null : n))
-                }
+                onClick={() => setSelectedRating((cur) => (cur === n ? null : n))}
                 onMouseEnter={() => setHoverRating?.(n)}
                 onMouseLeave={() => setHoverRating?.(0)}
                 onFocus={() => setHoverRating?.(n)}
@@ -136,7 +128,6 @@ export default function SummaryCard({
           })}
         </div>
 
-        {/* Action Buttons */}
         <div className="flex gap-3 ms-safe-interactive">
           <button
             onClick={handleDiscard}
@@ -158,7 +149,6 @@ export default function SummaryCard({
   );
 }
 
-/** lightweight parser to split the AI summary into titled sections */
 function parseSummary(summary: string) {
   try {
     const parts = summary.split(/\n(?=\*\*|\d\.|[-–] )/g);
