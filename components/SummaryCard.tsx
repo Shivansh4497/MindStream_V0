@@ -68,7 +68,6 @@ export default function SummaryCard({
     <div
       onClickCapture={handleCapture}
       className="mb-8 relative z-20 rounded-lg border bg-gradient-to-b from-indigo-50/60 to-white p-5 shadow-md transition-opacity duration-300 ease-out"
-      // ensure card itself is clickable region; interactive children will get higher z
       aria-live="polite"
     >
       <div className="flex items-start justify-between">
@@ -79,8 +78,8 @@ export default function SummaryCard({
           <div className="text-xs text-slate-500">Read, rate, then save — or discard it permanently.</div>
         </div>
 
-        {/* Dismiss (kept visually small; ensure it can receive clicks) */}
         <button
+          type="button"
           onClick={handleDiscard}
           aria-label="Dismiss reflection"
           className="text-xs text-slate-400 underline"
@@ -90,24 +89,24 @@ export default function SummaryCard({
         </button>
       </div>
 
-      <div className="mt-4 space-y-4 bg-white/80 rounded-md p-5 text-slate-800">
+      {/* CONTENT: non-interactive so it cannot cover buttons */}
+      <div className="mt-4 space-y-4 bg-white/80 rounded-md p-5 text-slate-800" style={{ pointerEvents: 'none' }}>
         {sections.map((sec, i) => (
           <div key={i}>
             <div className="flex items-center gap-2 mb-1">
               <span className="text-lg">{sec.icon}</span>
               <h3 className="font-semibold text-indigo-700 text-sm">{sec.title}</h3>
             </div>
-            <div className="text-[15px] whitespace-pre-wrap">{/* text-only layer (non-interactive) */}
+            <div className="text-[15px] whitespace-pre-wrap">
               <div dangerouslySetInnerHTML={{ __html: markDownLike(sec.text) }} />
             </div>
           </div>
         ))}
       </div>
 
-      {/* ACTIONS — placed after content but elevated to guaranteed interactive layer */}
+      {/* ACTIONS — guaranteed interactive area on top of content */}
       <div
         className="mt-3 flex items-center gap-3"
-        // create a local stacking context, raise above content
         style={{ position: 'relative', zIndex: 99999, pointerEvents: 'auto' }}
       >
         <div className="text-sm text-slate-600">Rate this reflection:</div>
@@ -125,7 +124,6 @@ export default function SummaryCard({
                 onFocus={() => setHoverRating?.(n)}
                 onBlur={() => setHoverRating?.(0)}
                 aria-label={`Select ${n} star`}
-                // ensure each star button sits above anything else
                 className={`text-2xl cursor-pointer select-none transition-transform ${filled ? 'text-yellow-500 scale-105' : 'text-slate-300'}`}
                 style={{ position: 'relative', zIndex: 99999, pointerEvents: 'auto' }}
                 title={`${n} star`}
@@ -136,9 +134,9 @@ export default function SummaryCard({
           })}
         </div>
 
-        {/* Right-side action buttons — forced into top layer */}
         <div className="ml-auto flex gap-3" style={{ position: 'relative', zIndex: 99999, pointerEvents: 'auto' }}>
           <button
+            type="button"
             onClick={handleDiscard}
             className="px-3 py-1 border rounded-md text-sm text-slate-600 bg-white hover:bg-slate-50"
             disabled={localSaving || isSavingRating}
@@ -148,6 +146,7 @@ export default function SummaryCard({
           </button>
 
           <button
+            type="button"
             onClick={handleSave}
             className="px-3 py-1 bg-indigo-600 text-white rounded-md text-sm hover:bg-indigo-700 disabled:opacity-50"
             disabled={localSaving || isSavingRating}
@@ -159,7 +158,7 @@ export default function SummaryCard({
       </div>
     </div>
   )
-}
+
 
 /** small parser to split the AI summary into titled sections */
 function parseSummary(summary: string) {
