@@ -1,83 +1,216 @@
 // components/EntryInput.tsx
-import React, { useState, useRef, useEffect } from "react";
+import React, { useEffect, useRef, useState } from "react";
 
-type Props = {
-  onSave: (text: string) => Promise<void> | void;
-  onStartRecord?: () => void;
-  onStopRecord?: () => void;
-  interimTranscript?: string;
+/**
+ * Regression-proof EntryInput
+ * Accepts both:
+ *  - Old props used by legacy pages/index.tsx:
+ *      finalText, setFinalText, interim, startRecording, stopRecording, saveTextEntry
+ *  - New props from refactor:
+ *      finalTranscript, interimTranscript, onStartRecord, onStopRecord, onSave, saving
+ *
+ * The component bridges them so you can swap gradually.
+ */
+
+type OldProps = {
+  finalText?: string;
+  setFinalText?: (text: string) => void;
+  interim?: string;
+  startRecording?: () => void;
+  stopRecording?: () => Promise<void> | void;
+  saveTextEntry?: (text: string, source?: string) => Promise<void> | void;
+  status?: string;
+  setStatus?: React.Dispatch<React.SetStateAction<string>>;
+  showToast?: (text: string, kind?: "error" | "success" | "info") => void;
+};
+
+type NewProps = {
   finalTranscript?: string;
+  interimTranscript?: string;
+  onStartRecord?: () => void;
+  onStopRecord?: () => Promise<void> | void;
+  onSave?: (text: string) => Promise<void> | void;
   isRecording?: boolean;
   saving?: boolean;
 };
 
-export default function EntryInput({
-  onSave,
-  onStartRecord,
-  onStopRecord,
-  interimTranscript,
-  finalTranscript,
-  isRecording,
-  saving,
-}: Props) {
-  const [text, setText] = useState("");
+type Props = OldProps & NewProps;
+
+export default function EntryInput(props: Props) {
+  // bridge old/new props
+  const {
+    // old
+    finalText,
+    setFinalText,
+    interim,
+    startRecording,
+    stopRecording,
+    saveTextEntry,
+    status,
+    setStatus,
+    showToast,
+    // new
+    finalTranscript,
+    interimTranscript,
+    onStartRecord,
+    onStopRecord,
+    onSave,
+    isRecording: isRecordingProp,
+    saving: savingProp,
+  } = props;
+
+  // Effective handlers / values (compatibility layer)
+  const effectiveFinal = finalTranscript ?? finalText ?? "";
+  const effectiveInterim = interimTranscript ?? interim ?? "";
+  const effectiveOnStart = onStartRecord ?? startRecording;
+  const effectiveOnStop = onStopRecord ?? stopRecording;
+  const effectiveOnSave = onSave ?? (async (text: string) => saveTextEntry && saveTextEntry(text, "manual"));
+  const effectiveIsRecording = typeof isRecordingProp === "boolean" ? isRecordingProp : false;
+  const effectiveSaving = typeof savingProp === "boolean" ? savingProp : false;
+
+  // local state: primary editable text field
+  const [text, setText] = useState<string>(effectiveFinal || "");
+  const [localRecording, setLocalRecording] = useState<boolean>(effectiveIsRecording);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
-  // If your voice transcription updates interim/final text, keep them in sync.
+  // keep local state in sync when upstream final/interim changes
   useEffect(() => {
-    if (interimTranscript && !finalTranscript) {
-      setText(interimTranscript);
+    // If an interim transcript arrives and there is no overriding final text, show it
+    if (effectiveInterim && !effectiveFinal) {
+      setText(effectiveInterim);
+      return;
     }
-    if (finalTranscript) {
-      setText(finalTranscript);
+    // If final transcript arrives, merge or replace as appropriate
+    if (effectiveFinal) {
+      // If upstream final differs and local text is same as prior interim, replace
+      setText((prev) => {
+        // If final contains prev (accumulation) prefer final
+        if (!prev || prev.trim() === "" || effectiveFinal.includes(prev.trim())) {
+          return effectiveFinal;
+        }
+        // otherwise keep typed text (user may be editing)
+        return prev;
+      });
+      // If a setter was passed, keep it in sync (back-compat)
+      if (setFinalText && effectiveFinal !== finalText) {
+        try {
+          setFinalText(effectiveFinal);
+        } catch (e) {
+          // ignore
+        }
+      }
     }
-  }, [interimTranscript, finalTranscript]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [effectiveInterim, effectiveFinal]);
 
-  const handleSave = async () => {
-    if (!text.trim()) return;
-    await onSave(text.trim());
-    setText("");
+  // If parent tells us isRecording, reflect it.
+  useEffect(() => {
+    setLocalRecording(effectiveIsRecording);
+  }, [effectiveIsRecording]);
+
+  // Handlers
+  const handleSaveClicked = async () => {
+    const trimmed = (text || "").trim();
+    if (!trimmed) {
+      showToast?.("Nothing to save", "info");
+      return;
+    }
+    try {
+      setStatus?.("saving");
+    } catch (e) {}
+    try {
+      await effectiveOnSave?.(trimmed);
+      // If parent provided setFinalText (old API) keep it up to date
+      try {
+        setFinalText?.("");
+      } catch (e) {}
+      setText("");
+      showToast?.("Saved reflection", "success");
+    } catch (err) {
+      console.error("[EntryInput] save error", err);
+      showToast?.("Error saving reflection", "error");
+    } finally {
+      try {
+        setStatus?.("");
+      } catch (e) {}
+    }
   };
 
+  const handleStart = () => {
+    setLocalRecording(true);
+    try {
+      effectiveOnStart?.();
+    } catch (e) {}
+  };
+
+  const handleStop = async () => {
+    try {
+      await effectiveOnStop?.();
+    } catch (e) {
+      console.warn("[EntryInput] stop handler error", e);
+    } finally {
+      setLocalRecording(false);
+    }
+  };
+
+  // Render: keeps the refined UI (capsule, rounded, safe-interactive)
   return (
-    <div className="ms-card ms-input-capsule p-5 relative transition-all">
+    <div className="ms-card ms-input-capsule p-5 relative transition-all" data-testid="entry-input">
       <div className="flex items-start gap-4">
         <textarea
           ref={textareaRef}
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => {
+            setText(e.target.value);
+            // if the page gave a setFinalText, keep that in sync for back-compat
+            try {
+              setFinalText?.(e.target.value);
+            } catch (err) {
+              // ignore
+            }
+          }}
           placeholder="What’s on your mind?"
           rows={2}
-          className="w-full resize-none bg-transparent text-gray-800 placeholder-gray-400 focus:outline-none focus-visible:ring-0"
+          className="w-full resize-none bg-transparent text-gray-800 placeholder-gray-400 focus:outline-none"
           aria-label="Write your reflection"
         />
 
         <div className="flex flex-col gap-2 ms-safe-interactive">
           <button
-            onMouseDown={onStartRecord}
-            onMouseUp={onStopRecord}
-            onTouchStart={onStartRecord}
-            onTouchEnd={onStopRecord}
-            disabled={saving}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              handleStart();
+            }}
+            onMouseUp={(e) => {
+              e.preventDefault();
+              handleStop();
+            }}
+            onTouchStart={(e) => {
+              e.preventDefault();
+              handleStart();
+            }}
+            onTouchEnd={(e) => {
+              e.preventDefault();
+              handleStop();
+            }}
+            disabled={effectiveSaving}
             aria-label="Hold to record"
             title="Hold to record"
             className={`px-3 py-2 rounded-md text-sm border ms-focus-ring transition-colors ${
-              isRecording
-                ? "bg-teal-100 border-teal-300 text-teal-700"
-                : "bg-indigo-50 border-indigo-100 text-indigo-700 hover:bg-indigo-100"
+              localRecording ? "bg-teal-100 border-teal-300 text-teal-700" : "bg-indigo-50 border-indigo-100 text-indigo-700 hover:bg-indigo-100"
             }`}
           >
-            {isRecording ? "●" : "🎙️"}
+            {localRecording ? "●" : "🎙️"}
           </button>
 
           <button
-            onClick={handleSave}
-            disabled={saving || !text.trim()}
+            onClick={handleSaveClicked}
+            disabled={effectiveSaving || !text.trim()}
             aria-label="Save reflection"
             title="Save reflection"
             className="px-4 py-2 rounded-md bg-indigo-600 text-white text-sm ms-cta-shimmer hover:bg-indigo-700 disabled:opacity-60"
           >
-            {saving ? "Saving…" : "Save"}
+            {effectiveSaving ? "Saving…" : "Save"}
           </button>
         </div>
       </div>
