@@ -16,7 +16,9 @@ type EntryInputProps = {
 }
 
 /**
- * EntryInput: the input/record controls. Stateless; uses callbacks from parent (index.tsx).
+ * EntryInput: the input/record controls.
+ * - Focuses once on mount (no forced blur refocus).
+ * - Uses separate refs for input & textarea to satisfy typing.
  */
 export default function EntryInput({
   finalText,
@@ -28,33 +30,22 @@ export default function EntryInput({
   saveTextEntry,
   status,
   setStatus,
-  showToast
+  showToast,
 }: EntryInputProps) {
-  // Separate refs for input and textarea to satisfy React/TSX typing
+  // Separate refs for input and textarea to satisfy React/TS typing
   const inputElRef = useRef<HTMLInputElement | null>(null)
   const textareaElRef = useRef<HTMLTextAreaElement | null>(null)
 
-  // focus once on mount (do not force refocus on blur — that causes focus-jumping)
+  // Focus once on mount — prefer textarea (editing transcript) otherwise input
   useEffect(() => {
-  // prefer textarea if present (editing transcription), otherwise input
     const el = textareaElRef.current || inputElRef.current
     if (!el) return
     try {
-      el.focus({ preventScroll: true })
+      ;(el as HTMLElement).focus({ preventScroll: true })
     } catch {
-    // older browsers
-      el.focus()
+      ;(el as HTMLElement).focus()
     }
   }, [])
-
-
-    // Keep focus locked — if blur happens due to layout change, refocus
-    const handleBlur = () => {
-      requestAnimationFrame(() => el.focus())
-    }
-    el.addEventListener('blur', handleBlur)
-    return () => el.removeEventListener('blur', handleBlur)
-  }, [finalText])
 
   const canSave = (finalText || '').trim().length > 0 && !isRecording
 
@@ -67,7 +58,7 @@ export default function EntryInput({
             value={finalText}
             onChange={(e) => setFinalText(e.target.value)}
             rows={4}
-            className="flex-1 rounded-md border px-4 py-3 shadow-sm text-[15px]"
+            className="flex-1 rounded-md border px-4 py-3 shadow-sm text-[15px] resize-none"
             placeholder="Edit transcription before saving..."
             aria-label="Edit transcription"
           />
@@ -84,6 +75,7 @@ export default function EntryInput({
 
         <div className="flex flex-col gap-2">
           <button
+            type="button"
             onClick={() => saveTextEntry(finalText)}
             disabled={!canSave}
             className="rounded-md bg-indigo-700 text-white px-4 py-2 disabled:opacity-50"
@@ -93,6 +85,7 @@ export default function EntryInput({
           </button>
 
           <button
+            type="button"
             onMouseDown={(e) => {
               e.preventDefault()
               startRecording()
@@ -124,6 +117,7 @@ export default function EntryInput({
           <div className="text-xs text-slate-500">Edit transcription, then click Save or Cancel.</div>
           <div className="flex gap-2">
             <button
+              type="button"
               onClick={() => {
                 setFinalText('')
                 setStatus?.('Transcription discarded.')
@@ -134,6 +128,7 @@ export default function EntryInput({
               Cancel
             </button>
             <button
+              type="button"
               onClick={() => saveTextEntry(finalText)}
               className="px-3 py-1 bg-indigo-600 text-white rounded-md text-sm"
             >
