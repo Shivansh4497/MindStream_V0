@@ -164,8 +164,9 @@ export default function EntryInput(props: Props) {
             }
           }}
           placeholder="What’s on your mind?"
-          rows={2}
-          className="w-full resize-none bg-transparent text-gray-800 placeholder-gray-400 focus:outline-none"
+          rows={4}
+          style={{ minHeight: 92 }}
+          className="w-full resize-none bg-transparent text-gray-800 placeholder-gray-400 focus:outline-none text-base"
           aria-label="Write your reflection"
         />
 
@@ -189,10 +190,11 @@ export default function EntryInput(props: Props) {
             }}
             disabled={effectiveSaving}
             aria-label="Hold to record"
+            aria-pressed={localRecording}
             title="Hold to record"
-            className={`px-3 py-2 rounded-md text-sm border ms-focus-ring transition-transform duration-150 transform ${localRecording ? 'scale-95 bg-teal-100 ring-2 ring-teal-200 ms-mic-recording' : 'hover:scale-105 bg-indigo-50 border-indigo-100 text-indigo-700 hover:bg-indigo-100'}`}
+            className={`w-12 h-12 flex items-center justify-center rounded-md text-sm border ms-focus-ring transition-transform duration-150 transform ${localRecording ? 'scale-95 bg-teal-100 ring-2 ring-teal-200 ms-mic-recording' : 'hover:scale-105 bg-indigo-50 border-indigo-100 text-indigo-700 hover:bg-indigo-100'}`}
           >
-            {localRecording ? "●" : "🎙️"}
+            <span className="text-lg" aria-hidden>{localRecording ? "●" : "🎙️"}</span>
           </button>
 
           <button
