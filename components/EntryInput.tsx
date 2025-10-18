@@ -82,16 +82,12 @@ export default function EntryInput(props: Props) {
     }
     // If final transcript arrives, merge or replace as appropriate
     if (effectiveFinal) {
-      // If upstream final differs and local text is same as prior interim, replace
       setText((prev) => {
-        // If final contains prev (accumulation) prefer final
         if (!prev || prev.trim() === "" || effectiveFinal.includes(prev.trim())) {
           return effectiveFinal;
         }
-        // otherwise keep typed text (user may be editing)
         return prev;
       });
-      // If a setter was passed, keep it in sync (back-compat)
       if (setFinalText && effectiveFinal !== finalText) {
         try {
           setFinalText(effectiveFinal);
@@ -120,7 +116,6 @@ export default function EntryInput(props: Props) {
     } catch (e) {}
     try {
       await effectiveOnSave?.(trimmed);
-      // If parent provided setFinalText (old API) keep it up to date
       try {
         setFinalText?.("");
       } catch (e) {}
@@ -162,7 +157,6 @@ export default function EntryInput(props: Props) {
           value={text}
           onChange={(e) => {
             setText(e.target.value);
-            // if the page gave a setFinalText, keep that in sync for back-compat
             try {
               setFinalText?.(e.target.value);
             } catch (err) {
