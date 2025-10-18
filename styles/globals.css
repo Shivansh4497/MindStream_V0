@@ -2,8 +2,19 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Minimal base to get the Mindstream calm look */
-html,body,#__next {
+/* -------------------------
+   Mindstream global styles
+   -------------------------
+   - Balanced pastel background
+   - Card tokens (unified)
+   - Two-column layout helper (.ms-two-col)
+   - Left column widen helper (.ms-left-widen)
+   - Mic pulse animation (.ms-mic-recording)
+   - Summary preview fade (.summary-preview)
+   ------------------------- */
+
+/* Base page reset */
+html, body, #__next {
   height: 100%;
 }
 
@@ -12,20 +23,33 @@ body {
   font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
 }
 
-@keyframes softPulse {
-  0% {
-    box-shadow: 0 0 0 0 rgba(45, 212, 191, 0.5);
-  }
-  70% {
-    box-shadow: 0 0 0 10px rgba(45, 212, 191, 0);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgba(45, 212, 191, 0);
-  }
+/* Background gradient for calm tone */
+:root{
+  --ms-bg-1: #f3f6fb;
+  --ms-bg-2: #eef4fb;
+  --ms-card-bg: #ffffff;
+  --ms-accent: #6c5ce7;
+  --ms-teal: #14b8a6;
+  --ms-muted: #6b7280;
+  --ms-radius-lg: 18px;
+  --ms-radius-md: 12px;
+  --ms-elev-1: 0 6px 18px rgba(28, 24, 45, 0.06);
+  --ms-elev-2: 0 10px 30px rgba(28, 24, 45, 0.08);
 }
 
-.pulse-ring {
-  animation: softPulse 1.6s ease-out;
+html, body, #__next {
+  background: linear-gradient(180deg, var(--ms-bg-1) 0%, var(--ms-bg-2) 60%);
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+}
+
+/* ----------------
+   Motion & helpers
+   ---------------- */
+@keyframes softPulse {
+  0% { box-shadow: 0 0 0 0 rgba(45, 212, 191, 0.5); }
+  70% { box-shadow: 0 0 0 10px rgba(45, 212, 191, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(45, 212, 191, 0); }
 }
 
 @keyframes shimmer {
@@ -47,50 +71,31 @@ body {
   animation: fadeIn 0.8s ease-in-out forwards;
 }
 
-/* === Mindstream Safe Pointer Layer Fix === */
+/* -------------------------
+   Pointer-events safety rules
+   ------------------------- */
 
-/* Ensure any visible card, button, or modal always accepts pointer events */
-*[class*="SummaryCard"],
+/* Make interactive elements explicitly clickable (avoid accidental pointer-blocking overlays) */
 button,
 [role="button"],
 input,
-textarea {
+textarea,
+select,
+a {
   pointer-events: auto !important;
   position: relative;
   z-index: 10;
 }
 
-/* Prevent invisible overlay divs from blocking clicks */
+/* Avoid invisible overlays capturing clicks */
 div[style*="opacity: 0"],
 div[style*="max-height: 0"] {
   pointer-events: none !important;
 }
 
-/* === MINDSTREAM ADDED STYLES — APPENDED SAFELY === */
-
-/* Mindstream UI tokens & utilities */
-:root{
-  --ms-bg-1: #f3f6fb;
-  --ms-bg-2: #eef4fb;
-  --ms-card-bg: #ffffff;
-  --ms-accent: #6c5ce7;
-  --ms-teal: #14b8a6;
-  --ms-muted: #6b7280;
-  --ms-radius-lg: 18px;
-  --ms-radius-md: 12px;
-  --ms-elev-1: 0 6px 18px rgba(28, 24, 45, 0.06);
-  --ms-elev-2: 0 10px 30px rgba(28, 24, 45, 0.08);
-}
-
-/* Page background */
-html, body, #__next {
-  height: 100%;
-  background: linear-gradient(180deg, var(--ms-bg-1) 0%, var(--ms-bg-2) 60%);
-  -webkit-font-smoothing:antialiased;
-  -moz-osx-font-smoothing:grayscale;
-}
-
-/* Unified card tokens (P2) */
+/* -------------------------
+   Card tokens & visual system
+   ------------------------- */
 .ms-card, .ms-reflection, .ms-summary-card {
   border-radius: var(--ms-radius-lg);
   padding: 1.125rem; /* ~18px */
@@ -99,7 +104,6 @@ html, body, #__next {
   box-shadow: var(--ms-elev-1);
 }
 
-/* Summary card has slightly stronger elevation */
 .ms-summary-card {
   box-shadow: var(--ms-elev-2);
 }
@@ -126,7 +130,7 @@ html, body, #__next {
   border: 1px solid rgba(16,24,40,0.04);
 }
 
-/* CTA shimmer */
+/* CTA shimmer tiny helper */
 @keyframes ms-shimmer {
   0% { transform: translateY(0); }
   50% { transform: translateY(-2px); }
@@ -137,24 +141,39 @@ html, body, #__next {
   transform-origin: center;
 }
 
-/* safe-interactive utility (opt-in) */
+/* Safe interactive utility */
 .ms-safe-interactive {
   pointer-events: auto;
   position: relative;
   z-index: 10;
 }
 
-/* two-column container helper (P1) */
+/* Focus ring */
+.ms-focus-ring:focus {
+  outline: none;
+  box-shadow: 0 0 0 4px rgba(108,92,231,0.12);
+  border-radius: 10px;
+}
+
+/* -------------------------
+   Two-column layout (P1)
+   ------------------------- */
 .ms-two-col {
   display: grid;
-  grid-template-columns: 1fr 480px; /* widened for summaries */
+  grid-template-columns: 1fr 460px; /* slightly narrower right column for reading balance */
   gap: 44px; /* increased gutter */
   align-items: start;
   max-width: 1180px;
   margin: 0 auto;
 }
 
-/* responsive: stack on small screens */
+/* helper to visually widen left column content (P1 tweak) */
+.ms-left-widen {
+  max-width: 620px;
+  width: 100%;
+}
+
+/* responsive: stack on smaller screens */
 @media (max-width: 980px) {
   .ms-two-col {
     grid-template-columns: 1fr;
@@ -163,14 +182,9 @@ html, body, #__next {
   }
 }
 
-/* focus ring */
-.ms-focus-ring:focus {
-  outline: none;
-  box-shadow: 0 0 0 4px rgba(108,92,231,0.12);
-  border-radius: 10px;
-}
-
-/* Mic pulse animation (P3) */
+/* -------------------------
+   Mic pulse animation (P3)
+   ------------------------- */
 @keyframes ms-mic-pulse {
   0% { box-shadow: 0 0 0 0 rgba(20,184,166,0.18); }
   70% { box-shadow: 0 0 0 8px rgba(20,184,166,0); }
@@ -178,7 +192,9 @@ html, body, #__next {
 }
 .ms-mic-recording { animation: ms-mic-pulse 1.2s ease-out infinite; }
 
-/* Small utility to fade preview right edge */
+/* -------------------------
+   Summary preview fade (P2)
+   ------------------------- */
 .summary-preview {
   position: relative;
 }
@@ -192,3 +208,19 @@ html, body, #__next {
   background: linear-gradient(90deg, rgba(255,255,255,0), var(--ms-card-bg));
   pointer-events: none;
 }
+
+/* Small readability tweaks */
+.line-clamp-4 {
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Tiny utility classes used by components */
+.text-muted-sm {
+  color: var(--ms-muted);
+  font-size: 0.85rem;
+}
+
+/* End of globals.css */
