@@ -48,7 +48,7 @@ export default function SummaryCard({
 
   return (
     <article
-      className="ms-summary-card relative mb-8 p-6 transition-all duration-300 ease-out"
+      className="ms-summary-card relative mb-8 transition-all duration-300 ease-out"
       aria-live="polite"
     >
       <div className="flex items-start justify-between">
