@@ -63,3 +63,114 @@ div[style*="max-height: 0"] {
   pointer-events: none !important;
 }
 
+/* styles/globals.css */
+/* --- Add near top after Tailwind base/imports --- */
+
+:root{
+  --ms-bg-1: #f3f6fb;        /* very soft lavender */
+  --ms-bg-2: #eef4fb;        /* soft highlight */
+  --ms-card-bg: #ffffff;     /* card foreground */
+  --ms-accent: #6c5ce7;      /* indigo-ish */
+  --ms-teal: #14b8a6;        /* teal accent */
+  --ms-muted: #6b7280;       /* neutral text */
+  --ms-radius-lg: 18px;
+  --ms-radius-md: 12px;
+  --ms-elev-1: 0 6px 18px rgba(28, 24, 45, 0.06);
+  --ms-elev-2: 0 10px 30px rgba(28, 24, 45, 0.08);
+}
+
+/* page background */
+html, body, #__next {
+  height: 100%;
+  background: linear-gradient(180deg, var(--ms-bg-1) 0%, var(--ms-bg-2) 60%);
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+}
+
+/* global card token */
+.ms-card {
+  background: var(--ms-card-bg);
+  border-radius: var(--ms-radius-lg);
+  box-shadow: var(--ms-elev-1);
+  border: 1px solid rgba(16,24,40,0.04);
+}
+
+/* secondary card slightly elevated for summaries */
+.ms-summary-card {
+  background: linear-gradient(180deg, rgba(255,255,255,0.96), rgba(250,250,255,0.95));
+  border-radius: var(--ms-radius-lg);
+  box-shadow: var(--ms-elev-2);
+  border: 1px solid rgba(16,24,40,0.04);
+}
+
+/* compact reflection card */
+.ms-reflection {
+  border-radius: var(--ms-radius-md);
+  background: var(--ms-card-bg);
+  box-shadow: none;
+  border: 1px solid rgba(10,10,10,0.03);
+}
+
+/* capsule header */
+.ms-header-capsule {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  padding: 12px 18px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.6);
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(16,24,40,0.03);
+  box-shadow: 0 4px 12px rgba(16,24,40,0.04);
+}
+
+/* input capsule */
+.ms-input-capsule {
+  border-radius: 14px;
+  background: white;
+  padding: 10px;
+  box-shadow: 0 4px 12px rgba(15,23,42,0.04);
+  border: 1px solid rgba(16,24,40,0.04);
+}
+
+/* shimmer on CTA */
+@keyframes ms-shimmer {
+  0% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
+  100% { transform: translateY(0); }
+}
+.ms-cta-shimmer:hover {
+  animation: ms-shimmer 520ms ease-in-out;
+  transform-origin: center;
+}
+
+/* safe-interactive utility: opt-in rather than broad !important */
+.ms-safe-interactive {
+  pointer-events: auto;
+  position: relative;
+  z-index: 10;
+}
+
+/* two-column container helper */
+.ms-two-col {
+  display: grid;
+  grid-template-columns: 1fr 420px; /* reflections wide, summaries narrow */
+  gap: 36px;
+  align-items: start;
+}
+
+/* responsive: stack on small screens */
+@media (max-width: 980px) {
+  .ms-two-col {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+}
+
+/* subtle focus ring for accessibility */
+.ms-focus-ring:focus {
+  outline: none;
+  box-shadow: 0 0 0 4px rgba(108,92,231,0.12);
+  border-radius: 10px;
+}
+
