@@ -1,85 +1,17 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-/* Minimal base to get the Mindstream calm look */
-html,body,#__next {
-  height: 100%;
-}
-
-body {
-  @apply bg-white text-slate-800 antialiased;
-  font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
-}
-@keyframes softPulse {
-  0% {
-    box-shadow: 0 0 0 0 rgba(45, 212, 191, 0.5);
-  }
-  70% {
-    box-shadow: 0 0 0 10px rgba(45, 212, 191, 0);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgba(45, 212, 191, 0);
-  }
-}
-
-.pulse-ring {
-  animation: softPulse 1.6s ease-out;
-}
-@keyframes shimmer {
-  0% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.3); }
-  50% { box-shadow: 0 0 12px 4px rgba(99, 102, 241, 0.2); }
-  100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.3); }
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.animate-shimmer {
-  animation: shimmer 4s ease-in-out infinite;
-}
-
-.animate-fadeIn {
-  animation: fadeIn 0.8s ease-in-out forwards;
-}
-/* === Mindstream Safe Pointer Layer Fix === */
-
-/* Ensure any visible card, button, or modal always accepts pointer events */
-*[class*="SummaryCard"],
-button,
-[role="button"],
-input,
-textarea {
-  pointer-events: auto !important;
-  position: relative;
-  z-index: 10;
-}
-
-/* Prevent invisible overlay divs from blocking clicks */
-div[style*="opacity: 0"],
-div[style*="max-height: 0"] {
-  pointer-events: none !important;
-}
-
-/* styles/globals.css */
-/* --- Add near top after Tailwind base/imports --- */
-
 :root{
-  --ms-bg-1: #f3f6fb;        /* very soft lavender */
-  --ms-bg-2: #eef4fb;        /* soft highlight */
-  --ms-card-bg: #ffffff;     /* card foreground */
-  --ms-accent: #6c5ce7;      /* indigo-ish */
-  --ms-teal: #14b8a6;        /* teal accent */
-  --ms-muted: #6b7280;       /* neutral text */
+  --ms-bg-1: #f3f6fb;
+  --ms-bg-2: #eef4fb;
+  --ms-card-bg: #ffffff;
+  --ms-accent: #6c5ce7;
+  --ms-teal: #14b8a6;
+  --ms-muted: #6b7280;
   --ms-radius-lg: 18px;
   --ms-radius-md: 12px;
   --ms-elev-1: 0 6px 18px rgba(28, 24, 45, 0.06);
   --ms-elev-2: 0 10px 30px rgba(28, 24, 45, 0.08);
 }
 
-/* page background */
+/* Page background */
 html, body, #__next {
   height: 100%;
   background: linear-gradient(180deg, var(--ms-bg-1) 0%, var(--ms-bg-2) 60%);
@@ -87,7 +19,7 @@ html, body, #__next {
   -moz-osx-font-smoothing:grayscale;
 }
 
-/* global card token */
+/* Card tokens */
 .ms-card {
   background: var(--ms-card-bg);
   border-radius: var(--ms-radius-lg);
@@ -95,7 +27,6 @@ html, body, #__next {
   border: 1px solid rgba(16,24,40,0.04);
 }
 
-/* secondary card slightly elevated for summaries */
 .ms-summary-card {
   background: linear-gradient(180deg, rgba(255,255,255,0.96), rgba(250,250,255,0.95));
   border-radius: var(--ms-radius-lg);
@@ -103,7 +34,6 @@ html, body, #__next {
   border: 1px solid rgba(16,24,40,0.04);
 }
 
-/* compact reflection card */
 .ms-reflection {
   border-radius: var(--ms-radius-md);
   background: var(--ms-card-bg);
@@ -111,7 +41,7 @@ html, body, #__next {
   border: 1px solid rgba(10,10,10,0.03);
 }
 
-/* capsule header */
+/* Header capsule */
 .ms-header-capsule {
   display: flex;
   gap: 1rem;
@@ -124,7 +54,7 @@ html, body, #__next {
   box-shadow: 0 4px 12px rgba(16,24,40,0.04);
 }
 
-/* input capsule */
+/* Input capsule */
 .ms-input-capsule {
   border-radius: 14px;
   background: white;
@@ -133,7 +63,7 @@ html, body, #__next {
   border: 1px solid rgba(16,24,40,0.04);
 }
 
-/* shimmer on CTA */
+/* CTA shimmer */
 @keyframes ms-shimmer {
   0% { transform: translateY(0); }
   50% { transform: translateY(-2px); }
@@ -144,7 +74,7 @@ html, body, #__next {
   transform-origin: center;
 }
 
-/* safe-interactive utility: opt-in rather than broad !important */
+/* safe-interactive utility (opt-in) */
 .ms-safe-interactive {
   pointer-events: auto;
   position: relative;
@@ -154,9 +84,11 @@ html, body, #__next {
 /* two-column container helper */
 .ms-two-col {
   display: grid;
-  grid-template-columns: 1fr 420px; /* reflections wide, summaries narrow */
+  grid-template-columns: 1fr 420px;
   gap: 36px;
   align-items: start;
+  max-width: 1100px;
+  margin: 0 auto;
 }
 
 /* responsive: stack on small screens */
@@ -164,13 +96,13 @@ html, body, #__next {
   .ms-two-col {
     grid-template-columns: 1fr;
     gap: 18px;
+    padding: 0 18px;
   }
 }
 
-/* subtle focus ring for accessibility */
+/* focus ring */
 .ms-focus-ring:focus {
   outline: none;
   box-shadow: 0 0 0 4px rgba(108,92,231,0.12);
   border-radius: 10px;
 }
-
