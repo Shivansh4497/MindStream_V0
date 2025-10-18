@@ -611,22 +611,24 @@ export default function Home() {
   // Left column: EntryInput, generate button, generatedSummary preview, entries list
   const LeftColumn = (
     <>
-      {/* Entry input - keep original prop names and behavior */}
-      <EntryInput
-        finalText={finalText}
-        setFinalText={(text) => {
-          setFinalText(text)
-          handleTyping()
-        }}
-        interim={interim}
-        isRecording={isRecording}
-        startRecording={startRecording}
-        stopRecording={stopRecording}
-        saveTextEntry={saveTextEntry}
-        status={status}
-        setStatus={setStatus}
-        showToast={showToast}
-      />
+      <div className="ms-left-widen">
+        {/* Entry input - keep original prop names and behavior */}
+        <EntryInput
+          finalText={finalText}
+          setFinalText={(text) => {
+            setFinalText(text)
+            handleTyping()
+          }}
+          interim={interim}
+          isRecording={isRecording}
+          startRecording={startRecording}
+          stopRecording={stopRecording}
+          saveTextEntry={saveTextEntry}
+          status={status}
+          setStatus={setStatus}
+          showToast={showToast}
+        />
+      </div>
 
       {/* Reflect on your day button + gentle prompt */}
       <div className="flex flex-col items-center mb-6 relative">
@@ -779,8 +781,10 @@ export default function Home() {
                   >
                     <div className="p-4 flex items-start gap-4">
                       <div className="flex-1">
-                        <div className="text-sm text-slate-800 leading-snug line-clamp-4">
-                          {preview}
+                        <div className="summary-preview">
+                          <div className="text-sm text-slate-800 leading-snug line-clamp-4">
+                            {preview}
+                          </div>
                         </div>
                         <div className="mt-2 text-xs text-slate-400 flex items-center gap-3">
                           <span>
@@ -965,7 +969,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-indigo-50 to-white p-8">
-      <ToastContainer toast={toast} />
+      {/* single ToastContainer instance */}
       <ToastContainer toast={toast} />
       <DebugOverlayHelper />
 
