@@ -2,7 +2,7 @@
 import React, { useState } from 'react'
 import { markDownLike } from '../lib/ui'
 
-type Props = {
+type SummaryCardProps = {
   summary: string
   generatedAt?: string | null
   isSavingRating: boolean
@@ -13,11 +13,10 @@ type Props = {
 }
 
 /**
- * SummaryCard (fixed)
- *
- * - Ensures interactive controls sit on a guaranteed clickable layer (high z-index + pointer-events).
- * - Keeps visual layout and calm styling.
- * - Adds minimal capture logging to help detect remaining blockers (safe to remove once confirmed).
+ * SummaryCard
+ * - Renders AI-generated summary sections
+ * - Places interactive controls (stars, Save, Discard) into an absolutely positioned overlay
+ *   to guarantee they receive pointer events and are not blocked by content areas.
  */
 export default function SummaryCard({
   summary,
@@ -26,15 +25,13 @@ export default function SummaryCard({
   hoverRating,
   setHoverRating,
   saveRatedSummary,
-  discardSummary
-}: Props) {
-  // local selected rating so clicks are unambiguous
+  discardSummary,
+}: SummaryCardProps) {
   const [selectedRating, setSelectedRating] = useState<number | null>(null)
   const [localSaving, setLocalSaving] = useState(false)
 
   const sections = parseSummary(summary)
 
-  // helper — called by Save button
   const handleSave = async () => {
     if (localSaving || isSavingRating) return
     const ratingToSave = selectedRating || hoverRating || 5
@@ -56,20 +53,14 @@ export default function SummaryCard({
     }
   }
 
-  // Capture handler to help debugging stacking/pointer issues if they remain.
-  // Safe to keep (just logs), but can be removed after verification.
-  const handleCapture = (e: React.MouseEvent) => {
-    // comment out or remove in production later if you want zero logs
-    // eslint-disable-next-line no-console
-    console.log('[SummaryCard] onClickCapture target:', (e.target as HTMLElement)?.tagName, (e.target as any)?.className)
-  }
-
   return (
     <div
-      onClickCapture={handleCapture}
-      className="mb-8 relative z-20 rounded-lg border bg-gradient-to-b from-indigo-50/60 to-white p-5 shadow-md transition-opacity duration-300 ease-out"
+      className="mb-8 relative rounded-lg border bg-gradient-to-b from-indigo-50/60 to-white p-5 shadow-md transition-opacity duration-300 ease-out"
+      // create local stacking context (translateZ hack) so absolute overlay behaves predictably
+      style={{ WebkitTransform: 'translateZ(0)' }}
       aria-live="polite"
     >
+      {/* Top area: headline + small dismiss link */}
       <div className="flex items-start justify-between">
         <div>
           <div className="text-sm font-semibold text-indigo-800">
@@ -83,13 +74,13 @@ export default function SummaryCard({
           onClick={handleDiscard}
           aria-label="Dismiss reflection"
           className="text-xs text-slate-400 underline"
-          style={{ position: 'relative', zIndex: 99999, pointerEvents: 'auto' }}
+          style={{ pointerEvents: 'auto' }}
         >
           Dismiss
         </button>
       </div>
 
-      {/* CONTENT: non-interactive so it cannot cover buttons */}
+      {/* Content: the textual sections. Keep it purely presentational (non-interactive) so it can't intercept clicks */}
       <div className="mt-4 space-y-4 bg-white/80 rounded-md p-5 text-slate-800" style={{ pointerEvents: 'none' }}>
         {sections.map((sec, i) => (
           <div key={i}>
@@ -104,43 +95,65 @@ export default function SummaryCard({
         ))}
       </div>
 
-      {/* ACTIONS — guaranteed interactive area on top of content */}
+      {/* ACTIONS OVERLAY
+          Rendered as an absolutely positioned overlay inside the card container.
+          This overlay has pointer-events enabled and a high z-index so it reliably receives clicks.
+      */}
       <div
-        className="mt-3 flex items-center gap-3"
-        style={{ position: 'relative', zIndex: 99999, pointerEvents: 'auto' }}
+        className="absolute left-0 right-0 bottom-3 px-6"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          position: 'absolute',
+          zIndex: 99999,
+          pointerEvents: 'auto',
+          justifyContent: 'space-between',
+        }}
+        role="region"
+        aria-label="Reflection actions"
       >
-        <div className="text-sm text-slate-600">Rate this reflection:</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div className="text-sm text-slate-600 mr-2">Rate this reflection:</div>
 
-        <div className="flex items-center gap-1">
-          {[1, 2, 3, 4, 5].map((n) => {
-            const filled = selectedRating ? n <= selectedRating : n <= (hoverRating || 0)
-            return (
-              <button
-                key={n}
-                type="button"
-                onClick={() => setSelectedRating((cur) => (cur === n ? null : n))}
-                onMouseEnter={() => setHoverRating?.(n)}
-                onMouseLeave={() => setHoverRating?.(0)}
-                onFocus={() => setHoverRating?.(n)}
-                onBlur={() => setHoverRating?.(0)}
-                aria-label={`Select ${n} star`}
-                className={`text-2xl cursor-pointer select-none transition-transform ${filled ? 'text-yellow-500 scale-105' : 'text-slate-300'}`}
-                style={{ position: 'relative', zIndex: 99999, pointerEvents: 'auto' }}
-                title={`${n} star`}
-              >
-                {filled ? '★' : '☆'}
-              </button>
-            )
-          })}
+          <div style={{ display: 'flex', gap: 8 }}>
+            {[1, 2, 3, 4, 5].map((n) => {
+              const filled = selectedRating ? n <= selectedRating : n <= (hoverRating || 0)
+              return (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => setSelectedRating((cur) => (cur === n ? null : n))}
+                  onMouseEnter={() => setHoverRating?.(n)}
+                  onMouseLeave={() => setHoverRating?.(0)}
+                  onFocus={() => setHoverRating?.(n)}
+                  onBlur={() => setHoverRating?.(0)}
+                  aria-label={`Select ${n} star`}
+                  title={`${n} star`}
+                  style={{
+                    fontSize: 20,
+                    lineHeight: 1,
+                    cursor: 'pointer',
+                    border: 'none',
+                    background: 'transparent',
+                    pointerEvents: 'auto',
+                    zIndex: 99999,
+                  }}
+                >
+                  <span style={{ color: filled ? '#f6c945' : '#cbd5e1' }}>{filled ? '★' : '☆'}</span>
+                </button>
+              )
+            })}
+          </div>
         </div>
 
-        <div className="ml-auto flex gap-3" style={{ position: 'relative', zIndex: 99999, pointerEvents: 'auto' }}>
+        <div style={{ display: 'flex', gap: 8 }}>
           <button
             type="button"
             onClick={handleDiscard}
             className="px-3 py-1 border rounded-md text-sm text-slate-600 bg-white hover:bg-slate-50"
             disabled={localSaving || isSavingRating}
-            style={{ pointerEvents: localSaving || isSavingRating ? 'none' : 'auto' }}
+            style={{ pointerEvents: localSaving || isSavingRating ? 'none' : 'auto', zIndex: 99999 }}
           >
             Discard
           </button>
@@ -150,7 +163,7 @@ export default function SummaryCard({
             onClick={handleSave}
             className="px-3 py-1 bg-indigo-600 text-white rounded-md text-sm hover:bg-indigo-700 disabled:opacity-50"
             disabled={localSaving || isSavingRating}
-            style={{ pointerEvents: localSaving || isSavingRating ? 'none' : 'auto' }}
+            style={{ pointerEvents: localSaving || isSavingRating ? 'none' : 'auto', zIndex: 99999 }}
           >
             {localSaving || isSavingRating ? 'Saving...' : 'Save Reflection'}
           </button>
@@ -158,9 +171,9 @@ export default function SummaryCard({
       </div>
     </div>
   )
+}
 
-
-/** small parser to split the AI summary into titled sections */
+/** lightweight parser to split the AI summary into titled sections */
 function parseSummary(summary: string) {
   try {
     const parts = summary.split(/\n(?=\*\*|\d\.|[-–] )/g)
