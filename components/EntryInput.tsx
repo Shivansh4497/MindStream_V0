@@ -34,11 +34,19 @@ export default function EntryInput({
   const inputElRef = useRef<HTMLInputElement | null>(null)
   const textareaElRef = useRef<HTMLTextAreaElement | null>(null)
 
+  // focus once on mount (do not force refocus on blur — that causes focus-jumping)
   useEffect(() => {
-    // Focus the active input or textarea
+  // prefer textarea if present (editing transcription), otherwise input
     const el = textareaElRef.current || inputElRef.current
     if (!el) return
-    el.focus()
+    try {
+      el.focus({ preventScroll: true })
+    } catch {
+    // older browsers
+      el.focus()
+    }
+  }, [])
+
 
     // Keep focus locked — if blur happens due to layout change, refocus
     const handleBlur = () => {
