@@ -156,18 +156,18 @@ div[style*="max-height: 0"] {
 }
 
 /* -------------------------
-   Two-column layout (P1)
+   Two-column layout (EQUAL WIDTHS)
    ------------------------- */
 .ms-two-col {
   display: grid;
-  grid-template-columns: 1fr 460px; /* slightly narrower right column for reading balance */
+  grid-template-columns: 1fr 1fr; /* equal-width columns */
   gap: 44px; /* increased gutter */
   align-items: start;
   max-width: 1180px;
   margin: 0 auto;
 }
 
-/* helper to visually widen left column content (P1 tweak) */
+/* helper to visually widen left column content (keeps input centered within column) */
 .ms-left-widen {
   max-width: 620px;
   width: 100%;
