@@ -6,7 +6,6 @@ import EntryInput from '../components/EntryInput'
 import ToastContainer from '../components/ToastContainer'
 import SummaryCard from '../components/SummaryCard'
 import DebugOverlayHelper from '../components/DebugOverlayHelper'
-import TwoColumnLayout from '../components/TwoColumnLayout'
 
 import {
   previewText as previewTextUtil,
@@ -994,8 +993,27 @@ export default function Home() {
           />
         </div>
 
-        {/* Two-column layout: left = input + entries, right = summaries */}
-        <TwoColumnLayout left={LeftColumn} right={RightColumn} />
+        {/* === Two-column labeled layout (equal-width columns) === */}
+        <div className="ms-two-col mt-6">
+          {/* Column headers row: labels aligned with columns */}
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold text-slate-700">My Reflections</h2>
+            <div className="text-xs text-slate-400">{entries.length} items</div>
+          </div>
+
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold text-slate-700">My Summaries</h2>
+            <div className="text-xs text-slate-400">{summaries.length} items</div>
+          </div>
+
+          {/* Left column (grid auto places these) */}
+          <div>{LeftColumn}</div>
+
+          {/* Right column */}
+          <div id="your-summaries-section" ref={summariesRef as any}>
+            {RightColumn}
+          </div>
+        </div>
 
         {/* Visual status message */}
         {status && (
