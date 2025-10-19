@@ -3,28 +3,58 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Root tokens */
-:root{
+/* Root tokens (teal-indigo palette) */
+:root {
   --ms-bg-1: #f3f6fb;
-  --ms-bg-2: #eef4fb;
+  --ms-bg-2: #eef6f8;
   --ms-card-bg: #ffffff;
-  --ms-accent: #6c5ce7;
-  --ms-teal: #14b8a6;
-  --ms-muted: #6b7280;
+  --ms-accent-start: #14b8a6; /* teal */
+  --ms-accent-end: #6c5ce7;   /* indigo */
+  --ms-accent-mid: #3bbfaf;
+  --ms-muted: #64748b;
   --ms-radius-lg: 18px;
   --ms-radius-md: 12px;
   --ms-elev-1: 0 6px 18px rgba(28,24,45,0.06);
   --ms-elev-2: 0 10px 30px rgba(28,24,45,0.08);
+  --ms-shadow-sm: 0 4px 12px rgba(16,24,40,0.06);
 }
 
+/* Base */
 html, body, #__next { height: 100% }
-body { font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; background: linear-gradient(180deg, var(--ms-bg-1) 0%, var(--ms-bg-2) 60%); color: #0f172a; }
+body {
+  font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+  background: linear-gradient(180deg, var(--ms-bg-1) 0%, var(--ms-bg-2) 60%);
+  color: #0f172a;
+  -webkit-tap-highlight-color: transparent;
+}
 
-/* Top grid + two-column layout */
-.ms-top-grid { display: grid; grid-template-columns: 1fr 3fr; gap: 20px; align-items: stretch; max-width: 1180px; margin: 0 auto; padding: 0 12px; }
+/* gradient text utility */
+.text-gradient-teal-indigo {
+  background: linear-gradient(90deg, var(--ms-accent-start) 0%, var(--ms-accent-end) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* gradient button background */
+.bg-gradient-teal-indigo {
+  background: linear-gradient(180deg, var(--ms-accent-end) 0%, var(--ms-accent-start) 100%);
+}
+
+/* top grid: reflect (1fr) + input (3fr) */
+.ms-top-grid {
+  display: grid;
+  grid-template-columns: 1fr 3fr;
+  gap: 20px;
+  align-items: stretch;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 12px;
+}
 .ms-top-grid > * { display:flex; flex-direction:column; justify-content:stretch; }
 
-/* full-height button style (left) */
+/* full-height reflect button style (left). Keep the pill but softer */
 .ms-full-height-btn {
   width:100%;
   display:flex;
@@ -37,35 +67,110 @@ body { font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvet
   color: white;
   font-weight: 600;
   box-shadow: var(--ms-elev-1);
-  background: linear-gradient(180deg, #5b46e6 0%, #4b3be0 100%);
+  border: none;
+  background: linear-gradient(180deg, rgba(108,92,231,0.95) 0%, rgba(20,184,166,0.95) 100%);
 }
 
-/* two column equal layout for lists */
-.ms-two-col { display:grid; grid-template-columns: 1fr 1fr; gap: 44px; align-items:start; max-width:1180px; margin:20px auto 0; padding:0 12px; }
-@media (max-width: 980px) { .ms-top-grid { grid-template-columns: 1fr; gap: 14px; } .ms-two-col { grid-template-columns: 1fr; gap: 18px; } }
+/* subtle shimmer anim for reflect button */
+@keyframes reflect-shimmer {
+  0% { background-position: -200% 0 }
+  100% { background-position: 200% 0 }
+}
+.ms-full-height-btn.animate-shimmer {
+  background-image: linear-gradient(90deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.12) 50%, rgba(255,255,255,0.06) 100%);
+  background-size: 200% 100%;
+  animation: reflect-shimmer 3.2s linear infinite;
+}
 
-/* column header (sticky and aligned) */
-.ms-column-header { display:flex; align-items:center; justify-content:space-between; gap:12px; height:48px; margin-bottom: 8px; padding: 0 6px; position: relative; }
+/* two-column lists container */
+.ms-two-col {
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 44px;
+  align-items:start;
+  max-width:1180px;
+  margin:24px auto 0;
+  padding: 0 12px;
+}
+@media (max-width: 980px) {
+  .ms-top-grid { grid-template-columns: 1fr; gap: 14px; }
+  .ms-two-col { grid-template-columns: 1fr; gap: 18px; padding: 0 12px; margin-top: 16px; }
+}
+
+/* column header layout */
+.ms-column-header {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  height:48px;
+  margin-bottom: 8px;
+  padding: 0 6px;
+}
 
 /* input capsule */
-.ms-input-capsule { border-radius: 14px; background: var(--ms-card-bg); padding: 12px; box-shadow: var(--ms-elev-1); border: 1px solid rgba(16,24,40,0.04); }
+.ms-input-capsule {
+  border-radius: 14px;
+  background: var(--ms-card-bg);
+  padding: 12px;
+  box-shadow: var(--ms-elev-1);
+  border: 1px solid rgba(16,24,40,0.04);
+}
 .ms-input-capsule:focus-within { box-shadow: var(--ms-elev-2); transform: translateY(-2px); transition: box-shadow .18s ease, transform .18s ease; }
 
 /* consistent card */
-.card, .rounded-md { border-radius: 12px; padding: 16px; border: 1px solid rgba(16,24,40,0.04); background: var(--ms-card-bg); box-shadow: 0 2px 8px rgba(12,18,30,0.03); }
+.card, .rounded-md {
+  border-radius: 12px;
+  padding: 16px;
+  border: 1px solid rgba(16,24,40,0.04);
+  background: var(--ms-card-bg);
+  box-shadow: var(--ms-shadow-sm);
+}
 
-/* summary card slightly elevated */
-.ms-summary-card { border-radius: 12px; padding: 16px; background: linear-gradient(180deg, rgba(255,255,255,0.96), rgba(255,255,255,0.98)); border: 1px solid rgba(16,24,40,0.04); box-shadow: var(--ms-elev-1); }
+/* summary card */
+.ms-summary-card {
+  border-radius: 12px;
+  padding: 16px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(255,255,255,0.99));
+  border: 1px solid rgba(16,24,40,0.04);
+  box-shadow: var(--ms-elev-1);
+}
 
-/* date band style */
-.date-band { background: rgba(99,102,241,0.03); padding:8px 12px; border-radius:8px; display:inline-block; font-size: 13px; color: #64748b; }
+/* date band */
+.date-band {
+  background: rgba(99,102,241,0.03);
+  padding:8px 12px;
+  border-radius:8px;
+  display:inline-block;
+  font-size: 13px;
+  color: #64748b;
+}
 
-/* card-actions: consistent area for quick actions */
-.card-actions { height:44px; display:flex; align-items:center; gap:8px; opacity:0; transition: opacity .14s ease; }
+/* card actions: consistent area for quick actions */
+.card-actions {
+  height:44px;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  opacity:0;
+  transition: opacity .14s ease;
+}
 .card:hover .card-actions, .card-actions.force-visible { opacity:1; }
 @media (pointer:coarse) { .card-actions { opacity:1 } }
 
-/* preview clamping utilities */
+/* ensure action buttons are uniform */
+.card-actions button {
+  width: 34px;
+  height: 34px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  border-radius:8px;
+  background: transparent;
+  border: none;
+}
+
+/* preview clamp */
 .line-clamp-4 { display:-webkit-box; -webkit-line-clamp:4; -webkit-box-orient:vertical; overflow:hidden; }
 .line-clamp-2 { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
 
@@ -84,20 +189,61 @@ body { font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvet
 /* subtle hover lift for cards */
 .card:hover, .ms-summary-card:hover { transform: translateY(-2px); box-shadow: var(--ms-elev-2); transition: transform .18s ease, box-shadow .18s ease; }
 
-/* focus ring for accessible keyboard users */
-.ms-focus-ring:focus { outline: none; box-shadow: 0 0 0 4px rgba(108,92,231,0.12); border-radius: 8px; }
+/* focus ring for keyboard users */
+.ms-focus-ring:focus { outline: none; box-shadow: 0 0 0 4px rgba(20,184,166,0.12); border-radius: 8px; }
 
-/* compact density tweaks */
+/* compact density */
 .compact .card, .compact .ms-summary-card { padding: 12px; font-size: 14px; }
 
-/* top spacing between top row and columns */
+/* top spacing */
 .ms-top-gap { margin-top: 24px; }
 
-/* responsive touch-friendly button sizing */
+/* responsive touch-friendly */
 @media (max-width: 480px) {
   .ms-full-height-btn { min-height: 64px; border-radius: 10px; }
   .ms-input-capsule { padding: 10px; }
+  .card-actions button { width: 42px; height: 42px; }
 }
 
-/* ensure pointer-events for important controls */
+/* pointer-events
+   Fix for overlay debug widgets interfering with click targets in prod dev */
 button, [role="button"], input, textarea, select, a { pointer-events: auto !important; position: relative; z-index: 10 }
+
+/* streak glow helper */
+.ms-streak-glow {
+  animation: ms-streak-glow 900ms ease-out;
+}
+@keyframes ms-streak-glow {
+  0% { box-shadow: 0 0 0 0 rgba(20,184,166,0.18) }
+  50% { box-shadow: 0 8px 24px rgba(20,184,166,0.12) }
+  100% { box-shadow: 0 0 0 0 rgba(20,184,166,0) }
+}
+
+/* confetti (very subtle, CSS-only, limited) */
+.ms-confetti {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+}
+.ms-confetti span {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  opacity: 0;
+  transform: translateY(0) rotate(0);
+}
+.ms-confetti.show span {
+  opacity: 1;
+  animation: ms-confetti-drop 900ms ease-out forwards;
+}
+@keyframes ms-confetti-drop {
+  0% { transform: translateY(-6px) rotate(0); opacity: 1; }
+  100% { transform: translateY(46px) rotate(280deg); opacity: 0; }
+}
+
+/* small helper for gradient outlines */
+.ms-accent-border {
+  box-shadow: inset 0 0 0 1px linear-gradient(90deg, var(--ms-accent-start), var(--ms-accent-end));
+}
