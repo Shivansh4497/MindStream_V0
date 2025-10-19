@@ -212,10 +212,21 @@ export default function Home() {
     }
     load()
     const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
-      if (session?.user) setUser({ id: session.user.id, email: session.user.email ?? undefined }) else setUser(null)
-      fetchEntries()
-      fetchSummaries()
-    })
+      try {
+        if (session && session.user) {
+          setUser({ id: session.user.id, email: session.user.email ?? undefined });
+        } else {
+          setUser(null);
+        }
+      } catch (err) {
+        console.warn('onAuthStateChange handler error', err);
+      }
+
+  // refresh data after auth state changes
+  fetchEntries();
+  fetchSummaries();
+});
+
     return () => sub.subscription.unsubscribe()
   }, [])
 
