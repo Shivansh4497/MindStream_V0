@@ -607,11 +607,11 @@ export default function Home() {
 
   /* ---------------- Render: build left/right columns and main page ---------------- */
 
-  // Left column: EntryInput, generate button, generatedSummary preview, entries list
+  // Left column: EntryInput, generatedSummary preview, entries list (note: header label removed here)
   const LeftColumn = (
     <>
-      <div className="ms-left-widen">
-        {/* Entry input - keep original prop names and behavior */}
+      <div>
+        {/* Entry input */}
         <EntryInput
           finalText={finalText}
           setFinalText={(text) => {
@@ -626,28 +626,8 @@ export default function Home() {
           status={status}
           setStatus={setStatus}
           showToast={showToast}
+          stretch={false}
         />
-      </div>
-
-      {/* Reflect on your day button + gentle prompt */}
-      <div className="flex flex-col items-center mb-6 relative">
-        <button
-          onClick={generate24hSummary}
-          disabled={isGenerating}
-          className={`px-5 py-2 rounded-md text-white transition-all duration-300 ${
-            isGenerating
-              ? 'bg-indigo-400 cursor-wait'
-              : 'bg-indigo-600 hover:bg-indigo-700'
-          } ${!isGenerating ? 'animate-shimmer' : ''}`}
-        >
-          {isGenerating ? 'Reflecting...' : 'Reflect on your day'}
-        </button>
-
-        {showReflectPrompt && (
-          <div className="mt-3 text-sm text-slate-500 transition-opacity duration-700 ease-in-out animate-fadeIn">
-            ✨ Take a moment to reflect on your day.
-          </div>
-        )}
       </div>
 
       {/* DEBUG buttons */}
@@ -690,7 +670,6 @@ export default function Home() {
 
       {/* Entries list */}
       <section className="space-y-4 mb-12">
-        <div className="text-sm text-slate-500">Your Reflections</div>
         <div className="rounded-lg bg-white p-4 border shadow-sm">
           {entries.length === 0 ? (
             <div className="text-slate-700">
@@ -740,10 +719,9 @@ export default function Home() {
     </>
   )
 
-  // Right column: saved summaries (keeps original grouping / expand / delete UI)
+  // Right column: saved summaries (header label removed here)
   const RightColumn = (
-    <div ref={summariesRef as any}>
-      <div className="text-sm text-slate-500">Your Summaries</div>
+    <div>
       <div className="rounded-lg bg-white p-4 border shadow-sm space-y-6 mt-3">
         {summaries.length === 0 && (
           <div className="text-slate-700">
@@ -946,7 +924,6 @@ export default function Home() {
   )
 
   /* ---------------- Confirm modal (rendered in Part 2 with full handlers) ---------------- */
-  // NOTE: we keep this close to the top-level so it overlays correctly
   const ConfirmModalNode = (
     <ConfirmModal
       open={confirmOpen}
@@ -993,20 +970,53 @@ export default function Home() {
           />
         </div>
 
-        {/* === Two-column labeled layout (equal-width columns) === */}
-        <div className="ms-two-col mt-6">
-          {/* Column headers row: labels aligned with columns */}
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-slate-700">My Reflections</h2>
-            <div className="text-xs text-slate-400">{entries.length} items</div>
+        {/* === Top row (3:1) with button on left and capsule on right === */}
+        <div className="ms-top-grid mt-6">
+          {/* Left: Reflect button (1 part) - full height */}
+          <div className="flex items-stretch">
+            <button
+              onClick={generate24hSummary}
+              disabled={isGenerating}
+              className={`ms-full-height-btn bg-indigo-600 text-white text-base font-medium transition-all duration-300 rounded-lg ${isGenerating ? 'opacity-70 cursor-wait' : 'hover:bg-indigo-700'} ${!isGenerating ? 'animate-shimmer' : ''}`}
+              title="Reflect on your day"
+            >
+              {isGenerating ? 'Reflecting...' : 'Reflect on your day'}
+            </button>
           </div>
 
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-slate-700">My Summaries</h2>
+          {/* Right: What's on your mind capsule (3 parts) - stretch to same height */}
+          <div className="flex items-stretch">
+            <EntryInput
+              finalText={finalText}
+              setFinalText={(text) => {
+                setFinalText(text)
+                handleTyping()
+              }}
+              interim={interim}
+              isRecording={isRecording}
+              startRecording={startRecording}
+              stopRecording={stopRecording}
+              saveTextEntry={saveTextEntry}
+              status={status}
+              setStatus={setStatus}
+              showToast={showToast}
+              stretch={true}
+            />
+          </div>
+        </div>
+
+        {/* === Single header row for both columns === */}
+        <div className="ms-two-col mt-8">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-slate-700">My Reflections</h2>
+            <div className="text-xs text-slate-400">{entries.length} items</div>
+          </div>
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-slate-700">My Summaries</h2>
             <div className="text-xs text-slate-400">{summaries.length} items</div>
           </div>
 
-          {/* Left column (grid auto places these) */}
+          {/* Left column */}
           <div>{LeftColumn}</div>
 
           {/* Right column */}
