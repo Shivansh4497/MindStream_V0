@@ -2,14 +2,9 @@
 import React, { useEffect, useRef, useState } from "react";
 
 /**
- * Regression-proof EntryInput
- * Accepts both:
- *  - Old props used by legacy pages/index.tsx:
- *      finalText, setFinalText, interim, startRecording, stopRecording, saveTextEntry
- *  - New props from refactor:
- *      finalTranscript, interimTranscript, onStartRecord, onStopRecord, onSave, saving
- *
- * The component bridges them so you can swap gradually.
+ * EntryInput (full file)
+ * - Compatibility bridge: supports older props used in pages/index.tsx
+ * - Designed to stretch to parent height/width when placed in grid
  */
 
 type OldProps = {
@@ -32,14 +27,17 @@ type NewProps = {
   onSave?: (text: string) => Promise<void> | void;
   isRecording?: boolean;
   saving?: boolean;
+  /**
+   * Optional: make the wrapper stretch vertically (used to ensure equal-height with the button).
+   */
+  stretch?: boolean;
 };
 
 type Props = OldProps & NewProps;
 
 export default function EntryInput(props: Props) {
-  // bridge old/new props
+  // old props
   const {
-    // old
     finalText,
     setFinalText,
     interim,
@@ -49,7 +47,10 @@ export default function EntryInput(props: Props) {
     status,
     setStatus,
     showToast,
-    // new
+  } = props;
+
+  // new props (optional)
+  const {
     finalTranscript,
     interimTranscript,
     onStartRecord,
@@ -57,30 +58,27 @@ export default function EntryInput(props: Props) {
     onSave,
     isRecording: isRecordingProp,
     saving: savingProp,
-  } = props;
+    stretch,
+  } = props as NewProps;
 
-  // Effective handlers / values (compatibility layer)
   const effectiveFinal = finalTranscript ?? finalText ?? "";
   const effectiveInterim = interimTranscript ?? interim ?? "";
   const effectiveOnStart = onStartRecord ?? startRecording;
   const effectiveOnStop = onStopRecord ?? stopRecording;
-  const effectiveOnSave = onSave ?? (async (text: string) => saveTextEntry && saveTextEntry(text, "manual"));
+  const effectiveOnSave =
+    onSave ?? (async (text: string) => saveTextEntry && saveTextEntry(text, "manual"));
   const effectiveIsRecording = typeof isRecordingProp === "boolean" ? isRecordingProp : false;
   const effectiveSaving = typeof savingProp === "boolean" ? savingProp : false;
 
-  // local state: primary editable text field
   const [text, setText] = useState<string>(effectiveFinal || "");
   const [localRecording, setLocalRecording] = useState<boolean>(effectiveIsRecording);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
-  // keep local state in sync when upstream final/interim changes
   useEffect(() => {
-    // If an interim transcript arrives and there is no overriding final text, show it
     if (effectiveInterim && !effectiveFinal) {
       setText(effectiveInterim);
       return;
     }
-    // If final transcript arrives, merge or replace as appropriate
     if (effectiveFinal) {
       setText((prev) => {
         if (!prev || prev.trim() === "" || effectiveFinal.includes(prev.trim())) {
@@ -91,20 +89,16 @@ export default function EntryInput(props: Props) {
       if (setFinalText && effectiveFinal !== finalText) {
         try {
           setFinalText(effectiveFinal);
-        } catch (e) {
-          // ignore
-        }
+        } catch {}
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [effectiveInterim, effectiveFinal]);
 
-  // If parent tells us isRecording, reflect it.
   useEffect(() => {
     setLocalRecording(effectiveIsRecording);
   }, [effectiveIsRecording]);
 
-  // Handlers
   const handleSaveClicked = async () => {
     const trimmed = (text || "").trim();
     if (!trimmed) {
@@ -113,21 +107,23 @@ export default function EntryInput(props: Props) {
     }
     try {
       setStatus?.("saving");
-    } catch (e) {}
+    } catch {}
     try {
       await effectiveOnSave?.(trimmed);
       try {
         setFinalText?.("");
-      } catch (e) {}
+      } catch {}
       setText("");
       showToast?.("Saved reflection", "success");
+      // focus back to textarea for momentum
+      setTimeout(() => textareaRef.current?.focus(), 60);
     } catch (err) {
       console.error("[EntryInput] save error", err);
       showToast?.("Error saving reflection", "error");
     } finally {
       try {
         setStatus?.("");
-      } catch (e) {}
+      } catch {}
     }
   };
 
@@ -135,7 +131,7 @@ export default function EntryInput(props: Props) {
     setLocalRecording(true);
     try {
       effectiveOnStart?.();
-    } catch (e) {}
+    } catch {}
   };
 
   const handleStop = async () => {
@@ -148,10 +144,14 @@ export default function EntryInput(props: Props) {
     }
   };
 
-  // Render: keeps the refined UI (capsule, rounded, safe-interactive)
   return (
-    <div className="ms-card ms-input-capsule relative transition-all" data-testid="entry-input">
-      <div className="flex items-start gap-4">
+    <div
+      className={`ms-card ms-input-capsule relative transition-all flex flex-col justify-between ${
+        stretch ? "h-full" : ""
+      }`}
+      data-testid="entry-input"
+    >
+      <div className="flex gap-4 items-stretch">
         <textarea
           ref={textareaRef}
           value={text}
@@ -159,9 +159,7 @@ export default function EntryInput(props: Props) {
             setText(e.target.value);
             try {
               setFinalText?.(e.target.value);
-            } catch (err) {
-              // ignore
-            }
+            } catch {}
           }}
           placeholder="What’s on your mind?"
           rows={4}
@@ -192,9 +190,15 @@ export default function EntryInput(props: Props) {
             aria-label="Hold to record"
             aria-pressed={localRecording}
             title="Hold to record"
-            className={`w-12 h-12 flex items-center justify-center rounded-md text-sm border ms-focus-ring transition-transform duration-150 transform ${localRecording ? 'scale-95 bg-teal-100 ring-2 ring-teal-200 ms-mic-recording' : 'hover:scale-105 bg-indigo-50 border-indigo-100 text-indigo-700 hover:bg-indigo-100'}`}
+            className={`w-12 h-12 flex items-center justify-center rounded-md text-sm border ms-focus-ring transition-transform duration-150 transform ${
+              localRecording
+                ? "scale-95 bg-teal-100 ring-2 ring-teal-200 ms-mic-recording"
+                : "hover:scale-105 bg-indigo-50 border-indigo-100 text-indigo-700 hover:bg-indigo-100"
+            }`}
           >
-            <span className="text-lg" aria-hidden>{localRecording ? "●" : "🎙️"}</span>
+            <span className="text-lg" aria-hidden>
+              {localRecording ? "●" : "🎙️"}
+            </span>
           </button>
 
           <button
