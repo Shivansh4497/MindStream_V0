@@ -5,35 +5,85 @@ type HeaderProps = {
   user: { id: string; email?: string } | null
   signOut: () => Promise<void>
   signInWithGoogle: () => Promise<void>
-  streakCount: number
+  streakCount?: number
 }
 
-export default function Header({ user, signOut, signInWithGoogle, streakCount }: HeaderProps) {
+export default function Header({ user, signOut, signInWithGoogle, streakCount = 0 }: HeaderProps) {
+  // derive avatar initial (safe)
+  const avatarLabel = user?.email ? user.email.trim()[0].toUpperCase() : '?'
+  const emailTooltip = user?.email ?? 'Not signed in'
+
   return (
     <header className="mx-auto max-w-3xl px-2">
       <div className="flex items-start gap-6">
         <div className="flex-1">
-          <h1 className="text-4xl font-bold text-gradient-teal-indigo leading-tight">Mindstream</h1>
+          <h1 className="text-4xl font-extrabold text-gradient-teal-indigo leading-tight">Mindstream</h1>
           <p className="mt-2 text-slate-500">Your thoughts. Finally understood.</p>
-
-          {/* subtle privacy subtext */}
-          <div className="mt-3 text-xs text-slate-400">🔒 Voice stays in your browser — audio isn't stored.</div>
         </div>
 
-        {/* capsule aligned to same max width container (streak + email + logout) */}
-        <div className="flex items-center bg-white/70 rounded-full px-3 py-1.5 shadow-lg border border-white/40 backdrop-blur-sm" style={{ minWidth: 340 }}>
+        {/* Right capsule: streak + avatar + auth button */}
+        <div
+          className="flex items-center gap-4 rounded-full px-3 py-1.5 shadow-lg border border-white/40 bg-white/70 backdrop-blur-sm"
+          style={{ minWidth: 340 }}
+        >
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-teal-50 flex items-center justify-center text-teal-600 font-semibold ms-streak-badge">
+            {/* Streak badge */}
+            <div
+              aria-hidden
+              className="w-9 h-9 rounded-full bg-teal-50 flex items-center justify-center text-teal-600 font-semibold"
+              title={`${streakCount} day streak`}
+            >
               {streakCount}
             </div>
-            <div className="text-sm text-slate-700 truncate max-w-[220px]">{user?.email ?? 'Not signed in'}</div>
+
+            {/* Avatar initial with tooltip (shows full email on hover / focus) */}
+            <div className="flex items-center gap-3">
+              <div
+                className="relative"
+                aria-hidden={false}
+              >
+                <div
+                  className="w-9 h-9 rounded-full flex items-center justify-center font-medium text-white"
+                  style={{
+                    background: 'linear-gradient(90deg, var(--ms-accent-start), var(--ms-accent-end))',
+                    boxShadow: '0 6px 18px rgba(28,24,45,0.06)',
+                  }}
+                  title={emailTooltip}
+                >
+                  <span className="select-none">{avatarLabel}</span>
+                </div>
+              </div>
+
+              {/* short email truncated display — only when we want to show a hint (kept minimal) */}
+              <div className="hidden md:block text-sm text-slate-700 truncate max-w-[180px]">
+                {user ? (
+                  // show a visually truncated email but keep the full email in the avatar tooltip
+                  <span aria-hidden>{user.email}</span>
+                ) : (
+                  <span className="text-slate-400">Not signed in</span>
+                )}
+              </div>
+            </div>
           </div>
 
+          {/* spacer */}
           <div className="ml-auto flex items-center gap-3">
             {user ? (
-              <button onClick={signOut} className="px-3 py-1 rounded-md border text-sm hover:bg-slate-50">Sign out</button>
+              <button
+                onClick={signOut}
+                className="px-3 py-1 rounded-md border text-sm hover:bg-slate-50"
+                aria-label="Sign out"
+              >
+                Sign out
+              </button>
             ) : (
-              <button onClick={signInWithGoogle} className="px-3 py-1 rounded-md bg-gradient-teal-indigo text-white text-sm shadow-sm hover:opacity-95">Sign in</button>
+              <button
+                onClick={signInWithGoogle}
+                className="px-3 py-1 rounded-md bg-gradient-teal-indigo text-white text-sm shadow-sm hover:opacity-95"
+                aria-label="Sign in with Google"
+              >
+                Sign in
+              </button>
             )}
           </div>
         </div>
