@@ -1,21 +1,24 @@
 // components/EntryInput.tsx
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useRef, useEffect } from 'react'
+import RecordingPulse from './RecordingPulse'
 
-type Props = {
+type EntryInputProps = {
   finalText: string
-  setFinalText: (t: string) => void
+  setFinalText: (s: string) => void
   interim: string
   isRecording: boolean
   startRecording: () => void
-  stopRecording: () => Promise<void>
-  saveTextEntry: (text: string, source?: string) => Promise<any>
+  stopRecording: () => void
+  saveTextEntry: (text: string, source?: string) => Promise<void>
   status?: string | null
   setStatus?: (s: string | null) => void
-  showToast?: (text: string, kind?: 'info' | 'success' | 'error') => void
-  // stretch controls visual width/height for the top-row capsule
-  stretch?: boolean
+  showToast?: (text: string, kind?: 'info' | 'success' | 'error', ms?: number) => void
 }
 
+/**
+ * Single, accessible EntryInput component used at the top of the page.
+ * Focus-on-mount and hold-to-record behaviors included.
+ */
 export default function EntryInput({
   finalText,
   setFinalText,
@@ -27,164 +30,125 @@ export default function EntryInput({
   status,
   setStatus,
   showToast,
-  stretch = false,
-}: Props) {
-  const [localText, setLocalText] = useState(finalText || '')
-  const [isSaving, setIsSaving] = useState(false)
-  const buttonHoldRef = useRef(false)
-  const holdTimeoutRef = useRef<number | null>(null)
-  const inputRef = useRef<HTMLTextAreaElement | null>(null)
+}: EntryInputProps) {
+  const inputElRef = useRef<HTMLInputElement | null>(null)
+  const textareaElRef = useRef<HTMLTextAreaElement | null>(null)
 
   useEffect(() => {
-    // keep local buffer in sync with parent finalText (useful when transcription arrives)
-    setLocalText(finalText ?? '')
-  }, [finalText])
-
-  useEffect(() => {
-    return () => {
-      if (holdTimeoutRef.current) window.clearTimeout(holdTimeoutRef.current)
+    const el = textareaElRef.current || inputElRef.current
+    if (!el) return
+    try {
+      ;(el as HTMLElement).focus({ preventScroll: true })
+    } catch {
+      ;(el as HTMLElement).focus()
     }
   }, [])
 
-  // Save handler
-  async function handleSave(source: string = 'text') {
-    const text = (localText || '').trim()
-    if (!text) {
-      if (showToast) showToast('Cannot save an empty reflection', 'info')
-      setStatus?.('Cannot save empty entry.')
-      return
-    }
-    setIsSaving(true)
-    setStatus?.('Saving reflection...')
-    try {
-      await saveTextEntry(text, source)
-      setLocalText('')
-      setFinalText('')
-      setStatus?.('Saved.')
-    } catch (err: any) {
-      console.error('EntryInput: save failed', err)
-      setStatus?.('Save failed.')
-      if (showToast) showToast('Save failed', 'error')
-    } finally {
-      setIsSaving(false)
-      // small delay to let status be read
-      setTimeout(() => setStatus?.(null), 900)
-    }
-  }
-
-  // Handlers for hold-to-record (mouse + touch)
-  function beginHoldRecord() {
-    // small debounce to avoid accidental taps
-    if (!navigator) return
-    buttonHoldRef.current = true
-    holdTimeoutRef.current = window.setTimeout(() => {
-      if (buttonHoldRef.current) {
-        try {
-          startRecording()
-        } catch (e) {
-          console.warn('startRecording failed', e)
-          if (showToast) showToast('Could not start mic', 'error')
-        }
-      }
-    }, 160) // short delay
-  }
-
-  function endHoldRecord() {
-    buttonHoldRef.current = false
-    if (holdTimeoutRef.current) {
-      window.clearTimeout(holdTimeoutRef.current)
-      holdTimeoutRef.current = null
-    }
-    // If currently recording, stop
-    if (isRecording) {
-      stopRecording().catch((e) => console.warn('stopRecording err', e))
-    }
-  }
-
-  // keyboard shortcuts: Cmd/Ctrl+Enter to save
-  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-      e.preventDefault()
-      handleSave('text')
-    }
-  }
-
-  // small helper to compute combined preview (final + interim)
-  const combinedText = (localText || '') + (interim ? (localText ? ' ' : '') + interim : '')
+  const canSave = (finalText || '').trim().length > 0 && !isRecording
 
   return (
-    <div
-      className={`ms-input-capsule ${stretch ? '' : ''}`}
-      aria-live="polite"
-    >
-      <div className={`flex ${stretch ? 'flex-row' : 'flex-col'} gap-3 items-start`}>
-        {/* Left: textarea */}
-        <div className={`flex-1`}>
-          <label htmlFor="ms-entry" className="sr-only">
-            What's on your mind
-          </label>
+    <div className="mb-8">
+      <div className="flex gap-4 items-start">
+        {/* large, rounded input area */}
+        {finalText ? (
           <textarea
-            id="ms-entry"
-            ref={inputRef}
-            value={localText}
-            onChange={(e) => {
-              setLocalText(e.target.value)
-              setFinalText(e.target.value)
-            }}
-            onKeyDown={handleKeyDown}
-            placeholder="What’s on your mind?"
-            rows={stretch ? 5 : 4}
-            className="w-full bg-transparent resize-none border-none focus:outline-none text-lg leading-relaxed text-slate-800 placeholder:text-slate-400"
-            aria-label="Write your reflection"
+            ref={textareaElRef}
+            value={finalText}
+            onChange={(e) => setFinalText(e.target.value)}
+            rows={4}
+            className="flex-1 rounded-xl border px-6 py-5 shadow-md text-[15px] resize-none bg-white"
+            placeholder="Edit transcription before saving..."
+            aria-label="Edit transcription"
           />
-          <div className="mt-3 text-xs text-slate-400">
-            {interim ? (
-              <span>
-                <strong className="text-slate-600">Transcribing:</strong>{' '}
-                <span className="italic text-slate-500">{interim}</span>
-              </span>
-            ) : (
-              'Tip: hold the mic to record or just type — everything stays in your browser.'
-            )}
-          </div>
-        </div>
+        ) : (
+          <input
+            ref={inputElRef}
+            value={finalText}
+            onChange={(e) => setFinalText(e.target.value)}
+            className="flex-1 rounded-xl border px-6 py-5 shadow-md text-[15px] bg-white"
+            placeholder="What’s on your mind?"
+            aria-label="Quick thought input"
+          />
+        )}
 
-        {/* Right: mic icon + save */}
-        <div className="flex flex-col items-center gap-3">
-          {/* mic button */}
-          <div
-            role="button"
-            aria-pressed={isRecording}
-            aria-label={isRecording ? 'Release to stop recording' : 'Hold to record'}
-            onMouseDown={() => beginHoldRecord()}
-            onMouseUp={() => endHoldRecord()}
-            onMouseLeave={() => endHoldRecord()}
-            onTouchStart={() => beginHoldRecord()}
-            onTouchEnd={() => endHoldRecord()}
-            className={`w-12 h-12 rounded-md flex items-center justify-center ${isRecording ? 'ms-mic-recording' : ''}`}
-            style={{
-              background: isRecording ? 'linear-gradient(180deg,var(--ms-accent-start),var(--ms-accent-end))' : 'rgba(243,244,246,0.7)',
-              color: isRecording ? 'white' : 'var(--ms-accent-end)',
-              boxShadow: isRecording ? '0 8px 20px rgba(20,184,166,0.12)' : '0 4px 10px rgba(16,24,40,0.04)',
-              cursor: 'pointer',
-            }}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3z" />
-              <path d="M19 11v1a7 7 0 0 1-7 7 7 7 0 0 1-7-7v-1" stroke="none" />
-            </svg>
-          </div>
-
-          {/* Save button */}
+        {/* actions column */}
+        <div className="flex flex-col gap-3 w-36">
           <button
-            onClick={() => handleSave('text')}
-            disabled={isSaving || !combinedText.trim()}
-            className={`px-4 py-2 rounded-md text-white ${isSaving ? 'opacity-60 cursor-wait' : 'bg-gradient-teal-indigo hover:opacity-95'}`}
-            aria-label="Save reflection"
+            type="button"
+            onClick={() => saveTextEntry(finalText)}
+            disabled={!canSave}
+            className="rounded-xl bg-indigo-700 text-white px-4 py-3 disabled:opacity-50 shadow"
+            aria-disabled={!canSave}
           >
-            {isSaving ? 'Saving…' : 'Save'}
+            Save
+          </button>
+
+          <button
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault()
+              startRecording()
+            }}
+            onMouseUp={(e) => {
+              e.preventDefault()
+              stopRecording()
+            }}
+            onTouchStart={(e) => {
+              e.preventDefault()
+              startRecording()
+            }}
+            onTouchEnd={(e) => {
+              e.preventDefault()
+              stopRecording()
+            }}
+            className={`rounded-xl px-4 py-3 text-sm transition-shadow ${isRecording ? 'bg-teal-500 text-white shadow-lg' : 'bg-white border shadow'}`}
+            title="Hold to record"
+            aria-pressed={isRecording}
+          >
+            {isRecording ? 'Recording…' : 'Hold to record'}
           </button>
         </div>
+      </div>
+
+      {/* inline helper and actions */}
+      {finalText && (
+        <div className="mt-3 flex justify-between items-center">
+          <div className="text-xs text-slate-500">Edit transcription, then click Save or Cancel.</div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setFinalText('')
+                setStatus?.('Transcription discarded.')
+                showToast?.('Transcription discarded', 'info')
+              }}
+              className="px-3 py-1 border rounded-md text-sm text-slate-600 bg-white"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => saveTextEntry(finalText)}
+              className="px-3 py-1 bg-indigo-600 text-white rounded-md text-sm"
+            >
+              Save transcription
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Recording pulse and interim transcripts */}
+      <div className="mt-4 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <RecordingPulse isRecording={isRecording} />
+
+          {/* show live interim text while recording */}
+          <div className="text-xs text-slate-500">
+            {isRecording ? (interim ? interim : 'Listening…') : null}
+          </div>
+        </div>
+
+        <div className="text-xs text-slate-400">{status}</div>
       </div>
     </div>
   )
