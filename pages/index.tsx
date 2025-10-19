@@ -153,8 +153,17 @@ export default function Home() {
     try { if (typeof window !== 'undefined') return localStorage.getItem('expandedSummaryId') } catch {} return null
   })
   useEffect(() => {
-    try { if (expandedSummaryId) localStorage.setItem('expandedSummaryId', expandedSummaryId) else localStorage.removeItem('expandedSummaryId') } catch {}
+    try {
+      if (expandedSummaryId) {
+        localStorage.setItem('expandedSummaryId', expandedSummaryId)
+      } else {
+        localStorage.removeItem('expandedSummaryId')
+      }
+    } catch (e) {
+    // ignore localStorage errors (privacy/incognito)
+    }
   }, [expandedSummaryId])
+
   const [recentlyAddedId, setRecentlyAddedId] = useState<string | null>(null)
 
   /* confirm modal */
