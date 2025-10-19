@@ -8,9 +8,10 @@
    - Balanced pastel background
    - Card tokens (unified)
    - Two-column layout helper (.ms-two-col)
-   - Left column widen helper (.ms-left-widen)
+   - Top-row 3:1 layout helper (.ms-top-grid)
    - Mic pulse animation (.ms-mic-recording)
    - Summary preview fade (.summary-preview)
+   - Left column widen helper (.ms-left-widen)
    ------------------------- */
 
 /* Base page reset */
@@ -156,6 +157,47 @@ div[style*="max-height: 0"] {
 }
 
 /* -------------------------
+   Top-row 3:1 layout (button left, capsule right)
+   - Button column: 1fr
+   - Capsule column: 3fr
+   ------------------------- */
+.ms-top-grid {
+  display: grid;
+  grid-template-columns: 1fr 3fr; /* left button (1) + right capsule (3) */
+  gap: 20px;
+  align-items: stretch;
+  max-width: 1180px;
+  margin: 0 auto;
+}
+
+/* On smaller screens, stack vertically with button above capsule */
+@media (max-width: 980px) {
+  .ms-top-grid {
+    grid-template-columns: 1fr;
+    gap: 14px;
+    padding: 0 16px;
+  }
+}
+
+/* Make children stretch to equal height */
+.ms-top-grid > * {
+  display: flex;
+  flex-direction: column;
+  justify-content: stretch;
+}
+
+/* Button full-height helper */
+.ms-full-height-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 0.75rem 1rem;
+  border-radius: 12px;
+}
+
+/* -------------------------
    Two-column layout (EQUAL WIDTHS)
    ------------------------- */
 .ms-two-col {
@@ -164,7 +206,8 @@ div[style*="max-height: 0"] {
   gap: 44px; /* increased gutter */
   align-items: start;
   max-width: 1180px;
-  margin: 0 auto;
+  margin: 20px auto 0;
+  padding: 0 8px;
 }
 
 /* helper to visually widen left column content (keeps input centered within column) */
