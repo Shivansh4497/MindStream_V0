@@ -24,7 +24,7 @@ export default function Header({ user, signOut, signInWithGoogle, streakCount = 
         {/* Right capsule: streak + avatar + auth button */}
         <div
           className="flex items-center gap-4 rounded-full px-3 py-1.5 shadow-lg border border-white/40 bg-white/70 backdrop-blur-sm"
-          style={{ minWidth: 340 }}
+          style={{ minWidth: 300 }}
         >
           <div className="flex items-center gap-3">
             {/* Streak badge */}
@@ -37,31 +37,14 @@ export default function Header({ user, signOut, signInWithGoogle, streakCount = 
             </div>
 
             {/* Avatar initial with tooltip (shows full email on hover / focus) */}
-            <div className="flex items-center gap-3">
+            <div className="relative">
               <div
-                className="relative"
-                aria-hidden={false}
+                className="avatar-initial"
+                title={emailTooltip}
+                role="img"
+                aria-label={user?.email ? `Signed in as ${user.email}` : 'Not signed in'}
               >
-                <div
-                  className="w-9 h-9 rounded-full flex items-center justify-center font-medium text-white"
-                  style={{
-                    background: 'linear-gradient(90deg, var(--ms-accent-start), var(--ms-accent-end))',
-                    boxShadow: '0 6px 18px rgba(28,24,45,0.06)',
-                  }}
-                  title={emailTooltip}
-                >
-                  <span className="select-none">{avatarLabel}</span>
-                </div>
-              </div>
-
-              {/* short email truncated display — only when we want to show a hint (kept minimal) */}
-              <div className="hidden md:block text-sm text-slate-700 truncate max-w-[180px]">
-                {user ? (
-                  // show a visually truncated email but keep the full email in the avatar tooltip
-                  <span aria-hidden>{user.email}</span>
-                ) : (
-                  <span className="text-slate-400">Not signed in</span>
-                )}
+                <span className="select-none">{avatarLabel}</span>
               </div>
             </div>
           </div>
