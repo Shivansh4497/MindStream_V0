@@ -893,7 +893,13 @@ export default function Home() {
 
       <main className="mx-auto w-full max-w-3xl">
         <div className={`overflow-hidden transition-all duration-700 ease-in-out ${isHeaderVisible ? 'opacity-100 translate-y-0 max-h-[520px]' : 'opacity-0 -translate-y-3 pointer-events-none max-h-0'}`}>
-          <Header user={user} email={email} setEmail={setEmail} signOut={signOut} sendMagicLink={sendMagicLink} signInWithGoogle={signInWithGoogle} streakCount={streakCount} />
+          <Header
+            user={user}
+            signOut={signOut}
+            signInWithGoogle={signInWithGoogle}
+            streakCount={streakCount}
+          />
+
         </div>
 
         {/* Top: 3:1 grid (button left, capsule right) */}
