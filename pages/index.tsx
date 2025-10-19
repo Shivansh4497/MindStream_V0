@@ -48,7 +48,7 @@ const markDownLike = markDownLikeUtil
 const formatDateForGroup = formatDateForGroupUtil
 const renderStarsInline = renderStarsInlineUtil
 
-/* ---------------- Inline small components ---------------- */
+/* ---------------- small helpers & UI bits ---------------- */
 function Toast({ text, kind = 'info' }: { text: string; kind?: 'info' | 'success' | 'error' }) {
   const bg = kind === 'success' ? 'bg-teal-600' : kind === 'error' ? 'bg-rose-600' : 'bg-slate-700'
   return <div className={`text-white ${bg} px-3 py-2 rounded-md shadow-md text-sm`}>{text}</div>
@@ -159,7 +159,7 @@ export default function Home() {
 
   const summariesRef = useRef<HTMLDivElement | null>(null)
 
-  /* small util to compute 20-word preview from entry content */
+  /* small util: 20-word preview */
   function preview20Words(text: string) {
     if (!text) return ''
     const words = text.trim().split(/\s+/)
@@ -618,8 +618,7 @@ export default function Home() {
             signOut={signOut}
             signInWithGoogle={signInWithGoogle}
             streakCount={streakCount}
-        />
-
+          />
         </div>
 
         {/* TOP GRID: Reflect button (1fr) + Input capsule stretched (3fr) */}
@@ -696,7 +695,6 @@ export default function Home() {
           {/* LEFT: Reflections */}
           <section>
             <div className={`${density === 'compact' ? 'compact' : ''} space-y-6`}>
-              {/* NOTE: removed duplicate EntryInput from list — only the top stretched one remains */}
               {entries.length === 0 ? (
                 <div className="text-slate-700 card">Your thoughts will appear here once you start speaking or typing.</div>
               ) : (
@@ -716,20 +714,12 @@ export default function Home() {
 
                             <div className="flex flex-col items-end gap-3">
                               <div className="card-actions">
-                                {/* pin / edit icons kept if you have handlers (placeholders) */}
                                 <button title="Edit" onClick={() => { /* optional edit */ }} aria-label="Edit reflection">✏️</button>
                                 <button title="Pin" onClick={() => { /* optional pin */ }}>📌</button>
                                 <button title="Delete" onClick={() => confirmDeleteEntry(e.id)} aria-label="Delete reflection">🗑️</button>
                               </div>
                             </div>
                           </div>
-
-                          {/* In comfortable mode show timestamp under preview */}
-                          {density === 'comfortable' && (
-                            <div className="mt-3 text-xs text-slate-400">
-                              {e.created_at ? new Date(e.created_at).toLocaleString() : ''}
-                            </div>
-                          )}
                         </div>
                       </article>
                     )
@@ -764,18 +754,12 @@ export default function Home() {
                           <li key={s.id} className={`rounded-md border bg-white overflow-hidden transition-shadow ${highlight ? 'ring-2 ring-teal-200' : ''}`}>
                             <div className="p-4 flex items-start gap-4">
                               <div className="flex-1">
+                                <div className="date-band mb-2">{s.for_date ?? (s.created_at ? new Date(s.created_at).toLocaleDateString() : '')}</div>
                                 <div className="text-sm text-slate-800 leading-snug line-clamp-4">
                                   {preview}
                                 </div>
                                 <div className="mt-2 text-xs text-slate-400 flex items-center gap-3">
-                                  <span>
-                                    {s.for_date ?? (s.created_at ? new Date(s.created_at).toLocaleDateString() : '')}
-                                  </span>
                                   <span className="text-yellow-500" dangerouslySetInnerHTML={{ __html: renderStarsInline(s.rating) }} />
-                                  <span className="text-slate-400">·</span>
-                                  <span className="text-slate-500 text-xs">
-                                    {s.summary_text?.length ?? 0} chars
-                                  </span>
                                 </div>
                               </div>
 
