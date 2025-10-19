@@ -615,12 +615,11 @@ export default function Home() {
         >
           <Header
             user={user}
-            email={email}
-            setEmail={setEmail}
             signOut={signOut}
             signInWithGoogle={signInWithGoogle}
             streakCount={streakCount}
-          />
+        />
+
         </div>
 
         {/* TOP GRID: Reflect button (1fr) + Input capsule stretched (3fr) */}
