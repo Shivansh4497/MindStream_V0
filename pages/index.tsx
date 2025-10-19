@@ -22,13 +22,14 @@ declare global {
   }
 }
 
-/* ---------------- Lightweight types (informational only) ---------------- */
+/* ---------------- types */
 type EntryRow = {
   id: string
   content: string
   source?: string
   user_id?: string
   created_at?: string
+  pinned?: boolean
 }
 
 type SummaryRow = {
@@ -42,19 +43,19 @@ type SummaryRow = {
   range_end?: string
 }
 
-/* ---------------- small helpers (alias original utils) ---------------- */
+/* ---------------- utils alias */
 const previewText = previewTextUtil
 const markDownLike = markDownLikeUtil
 const formatDateForGroup = formatDateForGroupUtil
 const renderStarsInline = renderStarsInlineUtil
 
-/* ---------------- Inline Toast component ---------------- */
+/* ---------------- inline toast component (kept) */
 function Toast({ text, kind = 'info' }: { text: string; kind?: 'info' | 'success' | 'error' }) {
   const bg = kind === 'success' ? 'bg-teal-600' : kind === 'error' ? 'bg-rose-600' : 'bg-slate-700'
   return <div className={`text-white ${bg} px-3 py-2 rounded-md shadow-md text-sm`}>{text}</div>
 }
 
-/* ---------------- Confirm modal (kept minimal here; expanded in part 2) ---------------- */
+/* ---------------- Confirm Modal (same) */
 function ConfirmModal({
   open,
   title,
@@ -96,33 +97,72 @@ function ConfirmModal({
   )
 }
 
+/* ---------------- Edit Modal for entries */
+function EditModal({
+  open,
+  initial,
+  onSave,
+  onCancel,
+}: {
+  open: boolean
+  initial: string
+  onSave: (text: string) => Promise<void> | void
+  onCancel: () => void
+}) {
+  const [val, setVal] = useState(initial)
+  useEffect(() => setVal(initial), [initial])
+  if (!open) return null
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/40" onClick={onCancel} />
+      <div className="relative z-60 w-full max-w-2xl rounded-md bg-white p-6 shadow-lg">
+        <h3 className="text-lg font-semibold text-slate-900">Edit reflection</h3>
+        <textarea
+          className="w-full mt-3 p-3 border rounded-md min-h-[120px] focus:outline-none"
+          value={val}
+          onChange={(e) => setVal(e.target.value)}
+        />
+        <div className="mt-4 flex justify-end gap-3">
+          <button onClick={onCancel} className="px-3 py-1 border rounded-md text-sm">Cancel</button>
+          <button
+            onClick={async () => { await onSave(val) }}
+            className="px-3 py-1 bg-indigo-600 text-white rounded-md text-sm"
+          >
+            Save
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /* ---------------- Main Page ---------------- */
 export default function Home() {
-  /* ---------------- Auth & global UI state ---------------- */
+  /* Auth + global UI */
   const [user, setUser] = useState<{ id: string; email?: string } | null>(null)
   const [email, setEmail] = useState('')
   const [status, setStatus] = useState<string | null>(null)
   const [toast, setToast] = useState<{ text: string; kind?: 'info' | 'success' | 'error' } | null>(null)
 
-  /* Header fade + typing handling */
+  /* Header fade */
   const [isHeaderVisible, setIsHeaderVisible] = useState(true)
   const typingTimeout = useRef<NodeJS.Timeout | null>(null)
 
-  /* ---------------- Data sets ---------------- */
+  /* Data */
   const [entries, setEntries] = useState<EntryRow[]>([])
   const [summaries, setSummaries] = useState<SummaryRow[]>([])
   const [streakCount, setStreakCount] = useState<number>(0)
 
-  /* Generated summary state */
+  /* Generated summary */
   const [generatedSummary, setGeneratedSummary] = useState<string | null>(null)
   const [generatedAt, setGeneratedAt] = useState<string | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
   const [isSavingRating, setIsSavingRating] = useState(false)
 
-  /* Voice transcription */
+  /* Voice */
   const [isRecording, setIsRecording] = useState(false)
   const [interim, setInterim] = useState('')
-  const [finalText, setFinalText] = useState('') // typed / transcript buffer
+  const [finalText, setFinalText] = useState('')
   const recogRef = useRef<any>(null)
   const holdingRef = useRef(false)
 
@@ -142,7 +182,7 @@ export default function Home() {
   }, [expandedSummaryId])
   const [recentlyAddedId, setRecentlyAddedId] = useState<string | null>(null)
 
-  /* Confirm modal state */
+  /* Confirm modal */
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [confirmTitle, setConfirmTitle] = useState('')
   const [confirmDesc, setConfirmDesc] = useState<string | undefined>(undefined)
@@ -151,8 +191,40 @@ export default function Home() {
 
   const summariesRef = useRef<HTMLDivElement | null>(null)
 
+  /* P1: compact toggle persisted */
+  const [density, setDensity] = useState<'comfortable' | 'compact'>(() => {
+    try {
+      return (localStorage.getItem('listDensity') as 'comfortable' | 'compact') || 'comfortable'
+    } catch {
+      return 'comfortable'
+    }
+  })
+  useEffect(() => {
+    try {
+      localStorage.setItem('listDensity', density)
+    } catch {}
+  }, [density])
+
+  /* P1: onboarding tooltip (show once) */
+  const [showOnboarding, setShowOnboarding] = useState<boolean>(() => {
+    try {
+      return !localStorage.getItem('ms_seen_onboarding')
+    } catch {
+      return true
+    }
+  })
+  function dismissOnboarding() {
+    try { localStorage.setItem('ms_seen_onboarding', '1') } catch {}
+    setShowOnboarding(false)
+  }
+
+  /* edit modal state (for quick edit) */
+  const [editOpen, setEditOpen] = useState(false)
+  const [editInitial, setEditInitial] = useState('')
+  const [editSaveHandler, setEditSaveHandler] = useState<((t: string) => Promise<void>) | null>(null)
+
   /* small util: showToast */
-  function showToast(text: string, kind: 'info' | 'success' | 'error' = 'info', ms = 2200) {
+  function showToast(text: string, kind: 'info' | 'success' | 'error' = 'info', ms = 2500) {
     setToast({ text, kind })
     window.setTimeout(() => setToast(null), ms)
   }
@@ -176,18 +248,17 @@ export default function Home() {
     return () => sub.subscription.unsubscribe()
   }, [])
 
+  /* ---------------- Auth helpers ---------------- */
   const signInWithGoogle = async () => {
     setStatus('Redirecting to Google...')
     await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } })
   }
-
   const sendMagicLink = async () => {
     if (!email.includes('@')) return setStatus('Enter a valid email.')
     setStatus('Sending magic link...')
     const { error } = await supabase.auth.signInWithOtp({ email })
     setStatus(error ? error.message : 'Magic link sent — check your inbox.')
   }
-
   const signOut = async () => {
     await supabase.auth.signOut()
     setUser(null)
@@ -211,9 +282,9 @@ export default function Home() {
         .select('id, content, source, created_at, user_id')
         .eq('user_id', uid)
         .order('created_at', { ascending: false })
-        .limit(500)
+        .limit(1000)
       if (error) throw error
-      setEntries(data || [])
+      setEntries((data || []).map((d: any) => ({ ...d, pinned: false })))
     } catch (err) {
       console.error('fetchEntries error', err)
       setEntries([])
@@ -237,30 +308,62 @@ export default function Home() {
       const { data: inserted, error } = await supabase
         .from('entries')
         .insert([{ content: trimmed, source, user_id: uid }])
-        .select('id')
+        .select('*')
 
       if (error) throw error
 
-      const newId = Array.isArray(inserted) && inserted.length ? inserted[0].id : null
-      if (newId) setRecentlyAddedId(newId)
+      const newRow: any = Array.isArray(inserted) && inserted.length ? inserted[0] : null
+      if (newRow) {
+        setRecentlyAddedId(newRow.id)
+        // animate saved card briefly:
+        const temp = { ...newRow, pinned: false }
+        setEntries((prev) => [temp, ...prev])
+        setTimeout(() => setRecentlyAddedId(null), 1600)
+      } else {
+        await fetchEntries()
+      }
 
       setFinalText('')
-      showToast(randomAffirmation(), 'success', 2800)
-      await fetchEntries()
-
-      // fade out highlight after a moment
-      setTimeout(() => setRecentlyAddedId(null), 2000)
+      showToast(randomAffirmation(), 'success', 1600)
     } catch (err: any) {
       console.error('saveTextEntry', err)
       showToast('Save failed: ' + (err?.message || String(err)), 'error')
     }
   }
 
+  /* Pin toggle (local optimistic) */
+  const togglePinEntry = (id: string) => {
+    setEntries((prev) => prev.map((e) => (e.id === id ? { ...e, pinned: !e.pinned } : e)))
+    showToast('Toggled pin', 'info', 900)
+  }
+
+  /* Edit entry (opens modal) */
+  const openEditEntry = (e: EntryRow) => {
+    setEditInitial(e.content)
+    setEditOpen(true)
+    setEditSaveHandler(async (text: string) => {
+      try {
+        // optimistic UI
+        setEntries((prev) => prev.map((x) => (x.id === e.id ? { ...x, content: text } : x)))
+        const { error } = await supabase.from('entries').update({ content: text }).eq('id', e.id)
+        if (error) throw error
+        showToast('Updated entry', 'success')
+      } catch (err: any) {
+        console.error('edit entry error', err)
+        showToast('Could not save edit', 'error')
+        await fetchEntries()
+      } finally {
+        setEditOpen(false)
+        setEditSaveHandler(null)
+      }
+    })
+  }
+
+  /* Delete flow for entry */
   const confirmDeleteEntry = (entryId: string) => {
     setConfirmTitle('Delete entry')
     setConfirmDesc('Permanently delete this entry? This action cannot be undone.')
     confirmActionRef.current = async () => {
-      // optimistic remove from frontend
       setPendingDeleteId(entryId)
       setEntries((prev) => prev.filter((e) => e.id !== entryId))
       try {
@@ -270,7 +373,7 @@ export default function Home() {
       } catch (err: any) {
         console.error('delete entry failed', err)
         showToast('Could not delete entry: ' + (err?.message || String(err)), 'error')
-        await fetchEntries() // restore from backend
+        await fetchEntries()
       } finally {
         setPendingDeleteId(null)
       }
@@ -301,6 +404,23 @@ export default function Home() {
     }
   }
 
+  /* Delete saved summary helper */
+  const deleteSavedSummary = async (summaryId: string) => {
+    setPendingDeleteId(summaryId)
+    setSummaries((prev) => prev.filter((x) => x.id !== summaryId))
+    try {
+      const { error } = await supabase.from('summaries').delete().eq('id', summaryId)
+      if (error) throw error
+      showToast('Reflection deleted', 'info')
+    } catch (err: any) {
+      console.error('delete summary failed', err)
+      showToast('Could not delete reflection: ' + (err?.message || String(err)), 'error')
+      await fetchSummaries()
+    } finally {
+      setPendingDeleteId(null)
+    }
+  }
+
   /* ---------------- Streak fetch ---------------- */
   const fetchStreak = async () => {
     try {
@@ -320,7 +440,6 @@ export default function Home() {
 
   /* ---------------- Header fade when typing ---------------- */
   function handleTyping() {
-    // hide header immediately and show it after idle
     setIsHeaderVisible(false)
     if (typingTimeout.current) clearTimeout(typingTimeout.current)
     typingTimeout.current = setTimeout(() => {
@@ -330,17 +449,12 @@ export default function Home() {
 
   /* ---------------- Gentle reflection prompt (idle hint) ---------------- */
   const [showReflectPrompt, setShowReflectPrompt] = useState(false)
-
   useEffect(() => {
-    const idleTimer = setTimeout(() => {
-      setShowReflectPrompt(true)
-    }, 10000) // show after 10s idle
-
+    const idleTimer = setTimeout(() => setShowReflectPrompt(true), 10000)
     const resetIdle = () => setShowReflectPrompt(false)
     window.addEventListener('keydown', resetIdle)
     window.addEventListener('mousemove', resetIdle)
     window.addEventListener('click', resetIdle)
-
     return () => {
       clearTimeout(idleTimer)
       window.removeEventListener('keydown', resetIdle)
@@ -384,16 +498,12 @@ export default function Home() {
     r.onend = () => {
       if (holdingRef.current) {
         setTimeout(() => {
-          try {
-            recogRef.current?.start()
-          } catch {}
+          try { recogRef.current?.start() } catch {}
         }, 150)
       } else setIsRecording(false)
     }
 
-    return () => {
-      recogRef.current = null
-    }
+    return () => { recogRef.current = null }
   }, [])
 
   const startRecording = () => {
@@ -416,9 +526,7 @@ export default function Home() {
 
   const stopRecording = async () => {
     holdingRef.current = false
-    try {
-      recogRef.current?.stop()
-    } catch {}
+    try { recogRef.current?.stop() } catch {}
     setIsRecording(false)
     const text = (finalText + (interim ? ' ' + interim : '')).trim()
     setInterim('')
@@ -426,7 +534,6 @@ export default function Home() {
       setStatus('No speech captured.')
       return
     }
-    // put transcription into edit buffer (no auto-save)
     setFinalText(text)
     setStatus('Transcription ready — edit if needed, then click Save.')
     showToast('Transcription ready — edit and press Save', 'info')
@@ -446,6 +553,7 @@ export default function Home() {
       if (error) throw error
       if (!entries24?.length) {
         showToast('No entries in the past 24 hours', 'info')
+        setIsGenerating(false)
         return
       }
 
@@ -459,6 +567,7 @@ export default function Home() {
       if (!resp.ok) {
         console.error('generate error payload', payload)
         showToast('Couldn’t generate reflection right now', 'error')
+        setIsGenerating(false)
         return
       }
       setGeneratedSummary(payload.summary)
@@ -474,11 +583,7 @@ export default function Home() {
 
   /* ---------------- Save rated summary (persist reflection) ---------------- */
   async function saveRatedSummary(rating: number) {
-    console.log('[index] saveRatedSummary START', { rating, generatedSummaryExists: !!generatedSummary })
-    if (!generatedSummary) {
-      console.warn('[index] saveRatedSummary aborted: no generatedSummary present')
-      return
-    }
+    if (!generatedSummary) return
     try {
       setIsSavingRating(true)
       setStatus('Saving reflection...')
@@ -517,11 +622,7 @@ export default function Home() {
         setSummaries((prev) => [newRow, ...prev])
         setRecentlyAddedId(newRow.id)
         setExpandedSummaryId(newRow.id)
-        // collapse & remove highlight after a moment
-        setTimeout(() => {
-          setExpandedSummaryId(null)
-          setRecentlyAddedId(null)
-        }, 2600)
+        setTimeout(() => { setExpandedSummaryId(null); setRecentlyAddedId(null) }, 2600)
       } else {
         await fetchSummaries()
       }
@@ -529,23 +630,15 @@ export default function Home() {
       setGeneratedAt(null)
       setHoverRating(0)
 
-      // update streak server-side (best-effort)
+      // update streak (best-effort)
       try {
         await fetch('/api/user-stats', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ user_id: uid, for_date: todayIso })
         })
-      } catch (err) {
-        console.warn('streak update failed', err)
-      }
-
-      // re-fetch streak
-      try {
-        await fetchStreak()
-      } catch (err) {}
-
-      // scroll to summaries section after short delay
+      } catch (err) { console.warn('streak update failed', err) }
+      try { await fetchStreak() } catch (err) {}
       setTimeout(() => {
         const el = document.getElementById('your-summaries-section')
         if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -556,27 +649,35 @@ export default function Home() {
     } finally {
       setIsSavingRating(false)
     }
-    console.log('[index] saveRatedSummary DONE — new summaries length:', summaries.length)
   }
 
-  /* ---------------- Summary delete helper (used for saved summaries) ---------------- */
-  const deleteSavedSummary = async (summaryId: string) => {
-    setPendingDeleteId(summaryId)
-    setSummaries((prev) => prev.filter((x) => x.id !== summaryId))
-    try {
-      const { error } = await supabase.from('summaries').delete().eq('id', summaryId)
-      if (error) throw error
-      showToast('Reflection deleted', 'info')
-    } catch (err: any) {
-      console.error('delete summary failed', err)
-      showToast('Could not delete reflection: ' + (err?.message || String(err)), 'error')
-      await fetchSummaries()
-    } finally {
-      setPendingDeleteId(null)
-    }
+  /* ---------------- Export helpers (client-side markdown) ---------------- */
+  function exportReflectionsAsMarkdown() {
+    const md = entries.map((e) => `- ${new Date(e.created_at || '').toLocaleString()}\n\n${e.content}\n`).join('\n\n')
+    const blob = new Blob([md], { type: 'text/markdown' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `mindstream-reflections-${new Date().toISOString().slice(0,10)}.md`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  }
+  function exportSummariesAsMarkdown() {
+    const md = summaries.map((s) => `## ${s.for_date || (new Date(s.created_at || '')).toLocaleString()}\n\n${s.summary_text}\n`).join('\n\n')
+    const blob = new Blob([md], { type: 'text/markdown' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `mindstream-summaries-${new Date().toISOString().slice(0,10)}.md`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
   }
 
-  /* ---------------- Utility: groupEntriesByDate (kept local for original behavior) ---------------- */
+  /* ---------------- Utility: groupEntriesByDate (same) ---------------- */
   function groupEntriesByDate(entriesList: EntryRow[]) {
     const today = new Date()
     const groups: { title: string; items: EntryRow[] }[] = []
@@ -605,19 +706,15 @@ export default function Home() {
     return groups
   }
 
-  /* ---------------- Render: build left/right columns and main page ---------------- */
+  /* ---------------- Render left/right columns & list UI with quick actions ---------------- */
 
-  // Left column: EntryInput, generatedSummary preview, entries list (note: header label removed here)
+  /* Left column: EntryInput, generatedSummary preview, entries list */
   const LeftColumn = (
     <>
       <div>
-        {/* Entry input */}
         <EntryInput
           finalText={finalText}
-          setFinalText={(text) => {
-            setFinalText(text)
-            handleTyping()
-          }}
+          setFinalText={(text) => { setFinalText(text); handleTyping() }}
           interim={interim}
           isRecording={isRecording}
           startRecording={startRecording}
@@ -626,29 +723,25 @@ export default function Home() {
           status={status}
           setStatus={setStatus}
           showToast={showToast}
-          stretch={false}
+          stretch={true}
         />
+        {/* Onboarding tooltip anchored to input capsule */}
+        {showOnboarding && (
+          <div className="mt-3 p-3 bg-indigo-600 text-white rounded-md shadow-md max-w-sm">
+            <div className="flex justify-between items-start gap-2">
+              <div>
+                <div className="font-semibold">Welcome to Mindstream</div>
+                <div className="text-sm mt-1">Type freely or hold the mic to record. Your voice stays in the browser.</div>
+              </div>
+              <div className="pl-3">
+                <button onClick={dismissOnboarding} className="text-xs underline">Got it</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* DEBUG buttons */}
-      {generatedSummary && (
-        <div className="mb-3 flex gap-3">
-          <button
-            onClick={() => { console.log('[DEBUG] calling saveRatedSummary(5) directly'); saveRatedSummary(5).then(()=>console.log('[DEBUG] saveRatedSummary resolved')) }}
-            className="px-3 py-1 bg-emerald-500 text-white rounded-md text-sm"
-          >
-            DEBUG: saveRatedSummary(5)
-          </button>
-          <button
-            onClick={() => { console.log('[DEBUG] clearing generatedSummary'); setGeneratedSummary(null); setGeneratedAt(null) }}
-            className="px-3 py-1 bg-rose-400 text-white rounded-md text-sm"
-          >
-            DEBUG: clear generatedSummary
-          </button>
-        </div>
-      )}
-
-      {/* Generated summary preview (uses SummaryCard for the generated preview) */}
+      {/* Generated summary preview */}
       {generatedSummary && (
         <SummaryCard
           summary={generatedSummary}
@@ -658,8 +751,6 @@ export default function Home() {
           setHoverRating={setHoverRating}
           saveRatedSummary={saveRatedSummary}
           discardSummary={() => {
-            // immediate synchronous clear to hide the card locally
-            console.log('[index] discardSummary called (user action)')
             setGeneratedSummary(null)
             setGeneratedAt(null)
             setStatus('Reflection discarded.')
@@ -669,43 +760,37 @@ export default function Home() {
       )}
 
       {/* Entries list */}
-      <section className="space-y-4 mb-12">
+      <section className={`mb-12 ${density === 'compact' ? 'text-sm' : ''}`}>
         <div className="rounded-lg bg-white p-4 border shadow-sm">
           {entries.length === 0 ? (
-            <div className="text-slate-700">
-              Your thoughts will appear here once you start speaking or typing.
-            </div>
+            <div className="text-slate-700">Your thoughts will appear here once you start speaking or typing.</div>
           ) : (
-            <ul className="space-y-3">
+            <ul className="space-y-4">
               {groupEntriesByDate(entries).map((group) => (
                 <li key={group.title}>
-                  <div className="text-xs text-slate-400 mb-2">{group.title}</div>
+                  <div className="date-band mb-3 text-xs text-slate-400">{group.title}</div>
                   <ul className="space-y-3">
                     {group.items.map((e) => (
-                      <li
-                        key={e.id}
-                        className={`p-3 border rounded-md bg-white flex justify-between items-start ${
-                          recentlyAddedId === e.id ? 'ring-2 ring-teal-200' : ''
-                        }`}
-                      >
-                        <div className="flex-1 pr-4">
-                          <div className="text-slate-800 whitespace-pre-wrap">
-                            {e.content}
+                      <li key={e.id} className={`rounded-md border bg-white overflow-hidden transition-shadow ${recentlyAddedId === e.id ? 'ring-2 ring-teal-200' : ''} ${e.pinned ? 'border-indigo-200' : ''}`}>
+                        <div className="p-4 flex items-start gap-4">
+                          <div className="flex-1">
+                            <div className={`text-slate-800 whitespace-pre-wrap ${density === 'compact' ? 'line-clamp-2' : ''}`}>
+                              {e.content}
+                            </div>
+                            <div className="mt-2 text-xs text-slate-400">
+                              {new Date(e.created_at || Date.now()).toLocaleString()}
+                            </div>
                           </div>
-                          <div className="mt-2 text-xs text-slate-400">
-                            {new Date(e.created_at || Date.now()).toLocaleString()}
-                          </div>
-                        </div>
 
-                        <div className="flex flex-col items-end gap-2">
-                          <button
-                            onClick={() => confirmDeleteEntry(e.id)}
-                            className="text-xl px-2 py-1 rounded-md hover:bg-rose-50"
-                            title="Delete entry"
-                            aria-label="Delete entry"
-                          >
-                            🗑️
-                          </button>
+                          {/* quick actions */}
+                          <div className="flex flex-col items-end gap-2">
+                            <div className="card-actions flex items-center gap-2">
+                              <button onClick={() => openEditEntry(e)} title="Edit" className="p-2 rounded-md hover:bg-slate-50">✎</button>
+                              <button onClick={() => togglePinEntry(e.id)} title="Pin" className={`p-2 rounded-md hover:bg-slate-50 ${e.pinned ? 'opacity-100' : 'opacity-80'}`}>📌</button>
+                              <button onClick={() => { navigator.clipboard?.writeText(e.content); showToast('Copied', 'success') }} title="Copy" className="p-2 rounded-md hover:bg-slate-50">⎘</button>
+                              <button onClick={() => confirmDeleteEntry(e.id)} title="Delete" className="p-2 rounded-md hover:bg-rose-50">🗑️</button>
+                            </div>
+                          </div>
                         </div>
                       </li>
                     ))}
@@ -719,29 +804,17 @@ export default function Home() {
     </>
   )
 
-  // Right column: saved summaries (header label removed here)
+  /* Right column: saved summaries (grouping preserved) */
   const RightColumn = (
     <div>
       <div className="rounded-lg bg-white p-4 border shadow-sm space-y-6 mt-3">
-        {summaries.length === 0 && (
-          <div className="text-slate-700">
-            No summaries yet — generate one above.
-          </div>
-        )}
-
-        {/* Group summaries by for_date (preserve original rendering) */}
-        {Object.entries(
-          summaries.reduce((acc: Record<string, SummaryRow[]>, s) => {
-            const key =
-              s.for_date ||
-              (s.created_at
-                ? new Date(s.created_at).toLocaleDateString()
-                : 'Other')
-            if (!acc[key]) acc[key] = []
-            acc[key].push(s)
-            return acc
-          }, {})
-        ).map(([dateKey, list]) => (
+        {summaries.length === 0 && <div className="text-slate-700">No summaries yet — generate one above.</div>}
+        {Object.entries(summaries.reduce((acc: Record<string, SummaryRow[]>, s) => {
+          const key = s.for_date || (s.created_at ? new Date(s.created_at).toLocaleDateString() : 'Other')
+          if (!acc[key]) acc[key] = []
+          acc[key].push(s)
+          return acc
+        }, {})).map(([dateKey, list]) => (
           <div key={dateKey}>
             <div className="text-xs text-slate-400 mb-2">{dateKey}</div>
             <ul className="space-y-3">
@@ -750,167 +823,46 @@ export default function Home() {
                 const preview = previewText(s.summary_text || '', 220)
                 const highlight = recentlyAddedId === s.id
                 return (
-                  <li
-                    key={s.id}
-                    className={`rounded-md border bg-white overflow-hidden transition-shadow ${
-                      highlight ? 'ring-2 ring-teal-200' : ''
-                    }`}
-                  >
+                  <li key={s.id} className={`rounded-md border bg-white overflow-hidden transition-shadow ${highlight ? 'ring-2 ring-teal-200' : ''}`}>
                     <div className="p-4 flex items-start gap-4">
                       <div className="flex-1">
                         <div className="summary-preview">
-                          <div className="text-sm text-slate-800 leading-snug line-clamp-4">
+                          <div className={`text-sm text-slate-800 leading-snug ${density === 'compact' ? 'line-clamp-2' : 'line-clamp-4'}`}>
                             {preview}
                           </div>
                         </div>
                         <div className="mt-2 text-xs text-slate-400 flex items-center gap-3">
-                          <span>
-                            {s.for_date ??
-                              (s.created_at
-                                ? new Date(
-                                    s.created_at
-                                  ).toLocaleDateString()
-                                : '')}
-                          </span>
-                          <span
-                            className="text-yellow-500"
-                            dangerouslySetInnerHTML={{
-                              __html: renderStarsInline(s.rating),
-                            }}
-                          />
+                          <span>{s.for_date ?? (s.created_at ? new Date(s.created_at).toLocaleDateString() : '')}</span>
+                          <span className="text-yellow-500" dangerouslySetInnerHTML={{ __html: renderStarsInline(s.rating) }} />
                           <span className="text-slate-400">·</span>
-                          <span className="text-slate-500 text-xs">
-                            {s.summary_text?.length ?? 0} chars
-                          </span>
+                          <span className="text-slate-500 text-xs">{s.summary_text?.length ?? 0} chars</span>
                         </div>
                       </div>
 
                       <div className="flex flex-col items-end gap-2">
                         <div className="flex items-center gap-2">
-                          <button
-                            aria-expanded={isExpanded}
-                            aria-controls={`summary-body-${s.id}`}
-                            onClick={() =>
-                              setExpandedSummaryId((cur) =>
-                                cur === s.id ? null : s.id
-                              )
-                            }
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter' || e.key === ' ') {
-                                e.preventDefault()
-                                setExpandedSummaryId((cur) =>
-                                  cur === s.id ? null : s.id
-                                )
-                              }
-                            }}
-                            className="p-3 min-w-[44px] min-h-[44px] rounded-md border bg-white hover:bg-indigo-50"
-                            title={
-                              isExpanded
-                                ? 'Collapse summary'
-                                : 'Expand summary'
-                            }
-                          >
-                            <svg
-                              className={`w-5 h-5 transform transition-transform ${
-                                isExpanded ? 'rotate-180' : 'rotate-0'
-                              }`}
-                              xmlns="http://www.w3.org/2000/svg"
-                              fill="none"
-                              viewBox="0 0 24 24"
-                              stroke="currentColor"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M19 9l-7 7-7-7"
-                              />
-                            </svg>
+                          <button aria-expanded={isExpanded} aria-controls={`summary-body-${s.id}`} onClick={() => setExpandedSummaryId((cur) => cur === s.id ? null : s.id)} className="p-3 min-w-[44px] min-h-[44px] rounded-md border bg-white hover:bg-indigo-50" title={isExpanded ? 'Collapse summary' : 'Expand summary'}>
+                            <svg className={`w-5 h-5 transform transition-transform ${isExpanded ? 'rotate-180' : 'rotate-0'}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                           </button>
 
-                          <button
-                            onClick={() => {
-                              setConfirmTitle('Delete reflection')
-                              setConfirmDesc(
-                                'Permanently delete this reflection? This action cannot be undone.'
-                              )
-                              confirmActionRef.current = async () => {
-                                setPendingDeleteId(s.id)
-                                setSummaries((prev) =>
-                                  prev.filter((x) => x.id !== s.id)
-                                )
-                                try {
-                                  const { error } = await supabase
-                                    .from('summaries')
-                                    .delete()
-                                    .eq('id', s.id)
-                                  if (error) throw error
-                                  showToast('Reflection deleted', 'info')
-                                } catch (err: any) {
-                                  console.error(
-                                    'delete summary failed',
-                                    err
-                                  )
-                                  showToast(
-                                    'Could not delete reflection: ' +
-                                      (err?.message || String(err)),
-                                    'error'
-                                  )
-                                  await fetchSummaries()
-                                } finally {
-                                  setPendingDeleteId(null)
-                                }
-                              }
-                              setConfirmOpen(true)
-                            }}
-                            className="text-xl px-2 py-1 rounded-md hover:bg-rose-50"
-                            title="Delete reflection"
-                            aria-label="Delete reflection"
-                          >
-                            🗑️
-                          </button>
+                          {/* quick actions for summary */}
+                          <div className="card-actions flex items-center gap-2">
+                            <button onClick={() => { navigator.clipboard?.writeText(s.summary_text || ''); showToast('Copied summary', 'success') }} title="Copy" className="p-2 rounded-md hover:bg-slate-50">⎘</button>
+                            <button onClick={() => { setConfirmTitle('Delete reflection'); setConfirmDesc('Permanently delete this reflection?'); confirmActionRef.current = async () => { await deleteSavedSummary(s.id) }; setConfirmOpen(true) }} className="p-2 rounded-md hover:bg-rose-50" title="Delete">🗑️</button>
+                          </div>
                         </div>
                       </div>
                     </div>
 
                     {/* Expanded body */}
-                    <div
-                      id={`summary-body-${s.id}`}
-                      className="px-4 pb-4 transition-[max-height,opacity] duration-300 ease-in-out overflow-hidden"
-                      style={{
-                        maxHeight: isExpanded ? '1200px' : '0px',
-                        opacity: isExpanded ? 1 : 0,
-                      }}
-                      role="region"
-                      aria-hidden={!isExpanded}
-                    >
+                    <div id={`summary-body-${s.id}`} className="px-4 pb-4 transition-[max-height,opacity] duration-300 ease-in-out overflow-hidden" style={{ maxHeight: isExpanded ? '1200px' : '0px', opacity: isExpanded ? 1 : 0 }} role="region" aria-hidden={!isExpanded}>
                       <div className="mt-2 text-slate-800 leading-relaxed whitespace-pre-wrap">
-                        <div
-                          dangerouslySetInnerHTML={{
-                            __html: markDownLike(s.summary_text),
-                          }}
-                        />
+                        <div dangerouslySetInnerHTML={{ __html: markDownLike(s.summary_text) }} />
                       </div>
 
                       <div className="mt-3 flex items-center justify-between">
-                        <div className="text-xs text-slate-400">
-                          Saved{' '}
-                          {s.for_date ??
-                            (s.created_at
-                              ? new Date(
-                                  s.created_at
-                                ).toLocaleString()
-                              : '')}
-                        </div>
-                        <div className="text-sm text-slate-600">
-                          Your rating:{' '}
-                          <span
-                            className="text-yellow-500"
-                            dangerouslySetInnerHTML={{
-                              __html: renderStarsInline(s.rating),
-                            }}
-                          />
-                        </div>
+                        <div className="text-xs text-slate-400">Saved {s.for_date ?? (s.created_at ? new Date(s.created_at).toLocaleString() : '')}</div>
+                        <div className="text-sm text-slate-600">Your rating: <span className="text-yellow-500" dangerouslySetInnerHTML={{ __html: renderStarsInline(s.rating) }} /></div>
                       </div>
                     </div>
                   </li>
@@ -923,123 +875,82 @@ export default function Home() {
     </div>
   )
 
-  /* ---------------- Confirm modal (rendered in Part 2 with full handlers) ---------------- */
+  /* Confirm modal node */
   const ConfirmModalNode = (
-    <ConfirmModal
-      open={confirmOpen}
-      title={confirmTitle}
-      description={confirmDesc}
-      confirmLabel="Delete"
-      cancelLabel="Cancel"
-      onConfirm={async () => {
-        setConfirmOpen(false)
-        try {
-          await (confirmActionRef.current() as Promise<void> | void)
-        } catch (err) {
-          console.error('confirm action error', err)
-        }
-      }}
-      onCancel={() => setConfirmOpen(false)}
-    />
+    <ConfirmModal open={confirmOpen} title={confirmTitle} description={confirmDesc} confirmLabel="Delete" cancelLabel="Cancel" onConfirm={async () => { setConfirmOpen(false); try { await confirmActionRef.current() } catch (err) { console.error('confirm action error', err) } }} onCancel={() => setConfirmOpen(false)} />
   )
 
+  /* Edit modal */
+  const EditModalNode = editOpen && editSaveHandler ? <EditModal open={editOpen} initial={editInitial} onSave={async (text) => await editSaveHandler(text)} onCancel={() => { setEditOpen(false); setEditSaveHandler(null) }} /> : null
+
+  /* header visibility / main layout rendering */
   return (
     <div className="min-h-screen bg-gradient-to-b from-indigo-50 to-white p-8">
-      {/* single ToastContainer instance */}
       <ToastContainer toast={toast} />
       <DebugOverlayHelper />
-
-      {/* Confirm modal */}
       {ConfirmModalNode}
+      {EditModalNode}
 
       <main className="mx-auto w-full max-w-3xl">
-        {/* Header (fades away while typing) */}
-        <div
-          className={`overflow-hidden transition-all duration-700 ease-in-out ${
-            isHeaderVisible ? 'opacity-100 translate-y-0 max-h-[520px]' : 'opacity-0 -translate-y-3 pointer-events-none max-h-0'
-          }`}
-        >
-          <Header
-            user={user}
-            email={email}
-            setEmail={setEmail}
-            signOut={signOut}
-            sendMagicLink={sendMagicLink}
-            signInWithGoogle={signInWithGoogle}
-            streakCount={streakCount}
-          />
+        <div className={`overflow-hidden transition-all duration-700 ease-in-out ${isHeaderVisible ? 'opacity-100 translate-y-0 max-h-[520px]' : 'opacity-0 -translate-y-3 pointer-events-none max-h-0'}`}>
+          <Header user={user} email={email} setEmail={setEmail} signOut={signOut} sendMagicLink={sendMagicLink} signInWithGoogle={signInWithGoogle} streakCount={streakCount} />
         </div>
 
-        {/* === Top row (3:1) with button on left and capsule on right === */}
+        {/* Top: 3:1 grid (button left, capsule right) */}
         <div className="ms-top-grid mt-6">
-          {/* Left: Reflect button (1 part) - full height */}
           <div className="flex items-stretch">
-            <button
-              onClick={generate24hSummary}
-              disabled={isGenerating}
-              className={`ms-full-height-btn bg-indigo-600 text-white text-base font-medium transition-all duration-300 rounded-lg ${isGenerating ? 'opacity-70 cursor-wait' : 'hover:bg-indigo-700'} ${!isGenerating ? 'animate-shimmer' : ''}`}
-              title="Reflect on your day"
-            >
+            <button onClick={generate24hSummary} disabled={isGenerating} className={`ms-full-height-btn bg-indigo-600 text-white text-base font-medium transition-all duration-300 rounded-lg ${isGenerating ? 'opacity-70 cursor-wait' : 'hover:bg-indigo-700'} ${!isGenerating ? 'animate-shimmer' : ''}`} title="Reflect on your day" >
               {isGenerating ? 'Reflecting...' : 'Reflect on your day'}
             </button>
           </div>
 
-          {/* Right: What's on your mind capsule (3 parts) - stretch to same height */}
           <div className="flex items-stretch">
-            <EntryInput
-              finalText={finalText}
-              setFinalText={(text) => {
-                setFinalText(text)
-                handleTyping()
-              }}
-              interim={interim}
-              isRecording={isRecording}
-              startRecording={startRecording}
-              stopRecording={stopRecording}
-              saveTextEntry={saveTextEntry}
-              status={status}
-              setStatus={setStatus}
-              showToast={showToast}
-              stretch={true}
-            />
+            <EntryInput finalText={finalText} setFinalText={(text) => { setFinalText(text); handleTyping() }} interim={interim} isRecording={isRecording} startRecording={startRecording} stopRecording={stopRecording} saveTextEntry={saveTextEntry} status={status} setStatus={setStatus} showToast={showToast} stretch={true} />
           </div>
         </div>
 
-        {/* === Single header row for both columns === */}
-        <div className="ms-two-col mt-8">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-slate-700">My Reflections</h2>
-            <div className="text-xs text-slate-400">{entries.length} items</div>
-          </div>
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-slate-700">My Summaries</h2>
-            <div className="text-xs text-slate-400">{summaries.length} items</div>
+        {/* Single header row for both columns with density toggle + export */}
+        <div className="ms-two-col mt-8 items-start">
+          {/* header left */}
+          <div className="ms-column-header flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span className="text-lg font-semibold text-slate-700">My Reflections</span>
+              <span className="text-xs text-slate-400">{entries.length} items</span>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <button onClick={exportReflectionsAsMarkdown} className="px-2 py-1 text-xs border rounded-md">Export</button>
+              <div className="text-xs text-slate-500">View:</div>
+              <select value={density} onChange={(e) => setDensity(e.target.value as any)} className="text-sm border rounded-md px-2 py-1">
+                <option value="comfortable">Comfortable</option>
+                <option value="compact">Compact</option>
+              </select>
+            </div>
           </div>
 
-          {/* Left column */}
+          {/* header right */}
+          <div className="ms-column-header flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span className="text-lg font-semibold text-slate-700">My Summaries</span>
+              <span className="text-xs text-slate-400">{summaries.length} items</span>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <button onClick={exportSummariesAsMarkdown} className="px-2 py-1 text-xs border rounded-md">Export</button>
+            </div>
+          </div>
+
+          {/* left column */}
           <div>{LeftColumn}</div>
 
-          {/* Right column */}
-          <div id="your-summaries-section" ref={summariesRef as any}>
-            {RightColumn}
-          </div>
+          {/* right column */}
+          <div id="your-summaries-section" ref={summariesRef as any}>{RightColumn}</div>
         </div>
 
-        {/* Visual status message */}
-        {status && (
-          <div className="mt-6 text-sm text-slate-600" aria-live="polite">
-            {status}
-          </div>
-        )}
+        {status && <div className="mt-6 text-sm text-slate-600" aria-live="polite">{status}</div>}
+        <div aria-live="polite" aria-atomic="true" className="sr-only">{status}</div>
 
-        {/* Screen reader-only live region */}
-        <div aria-live="polite" aria-atomic="true" className="sr-only">
-          {status}
-        </div>
-
-        <footer className="mt-8 text-xs text-slate-400">
-          Private • Encrypted • Yours
-        </footer>
+        <footer className="mt-8 text-xs text-slate-400">Private • Encrypted • Yours</footer>
       </main>
     </div>
   )
