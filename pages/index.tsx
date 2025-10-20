@@ -59,17 +59,12 @@ function escapeHTML(s: string) {
     .replace(/'/g, '&#39;')
 }
 function safeMarkdown(src: string) {
-  // escape first, then allow a tiny subset of markdown
   const t = escapeHTML(src || '')
   return t
-    // **bold**
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    // *italic*
     .replace(/(^|[\s])\*(.+?)\*(?=[\s.,!?:;)]|$)/g, '$1<em>$2</em>')
-    // - bullets / numbered items (keep newlines)
     .replace(/(?:^|\n)\s*-\s+(.*)/g, (_m, p1) => `<br/>• ${p1}`)
     .replace(/(?:^|\n)\s*\d+\.\s+(.*)/g, (_m, p1) => `<br/>• ${p1}`)
-    // line breaks
     .replace(/\n/g, '<br/>')
 }
 
@@ -353,7 +348,7 @@ export default function Home() {
         setEntries((prev) => [temp, ...prev])
         setTimeout(() => setRecentlyAddedId(null), 1600)
       } else {
-        await fetchEntries() // ensure we actually update UI
+        await fetchEntries()
       }
 
       setFinalText('')
@@ -432,7 +427,6 @@ export default function Home() {
         .limit(500)
       if (error) throw error
       setSummaries(data || [])
-      // validate persisted expanded id
       if (expandedSummaryId && !(data || []).some((s) => s.id === expandedSummaryId)) {
         setExpandedSummaryId(null)
       }
@@ -529,7 +523,6 @@ export default function Home() {
 
     r.onerror = (e: any) => {
       console.error('SpeechRecognition error', e)
-      // stop holding to avoid infinite restart on no-speech / not-allowed
       holdingRef.current = false
       showToast('Recognition error: ' + e.error, 'error')
       setIsRecording(false)
@@ -755,38 +748,10 @@ export default function Home() {
 
   /* ---------------- Render left/right columns & list UI with quick actions ---------------- */
 
-  /* Left column: EntryInput, generatedSummary preview, entries list */
+  /* Left column: (EXTRA INPUT REMOVED) just generated preview and entries list */
   const LeftColumn = (
     <>
-      <div>
-        <EntryInput
-          finalText={finalText}
-          setFinalText={(text) => { setFinalText(text); handleTyping() }}
-          interim={interim}
-          isRecording={isRecording}
-          startRecording={startRecording}
-          stopRecording={stopRecording}
-          saveTextEntry={saveTextEntry}
-          status={status}
-          setStatus={setStatus}
-          showToast={showToast}
-          stretch={true}
-        />
-        {showOnboarding && (
-          <div className="mt-3 p-3 bg-indigo-600 text-white rounded-md shadow-md max-w-sm">
-            <div className="flex justify-between items-start gap-2">
-              <div>
-                <div className="font-semibold">Welcome to Mindstream</div>
-                <div className="text-sm mt-1">Type freely or hold the mic to record. Your voice stays in the browser.</div>
-              </div>
-              <div className="pl-3">
-                <button onClick={dismissOnboarding} className="text-xs underline">Got it</button>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
+      {/* Generated summary preview */}
       {generatedSummary && (
         <SummaryCard
           summary={generatedSummary}
@@ -804,6 +769,7 @@ export default function Home() {
         />
       )}
 
+      {/* Entries list */}
       <section className={`mb-12 ${density === 'compact' ? 'text-sm' : ''}`}>
         <div className="rounded-lg bg-white p-4 border shadow-sm">
           {entries.length === 0 ? (
@@ -826,6 +792,7 @@ export default function Home() {
                             </div>
                           </div>
 
+                          {/* quick actions */}
                           <div className="flex flex-col items-end gap-2">
                             <div className="card-actions flex items-center gap-2">
                               <button onClick={() => openEditEntry(e)} title="Edit" className="p-2 rounded-md hover:bg-slate-50">✎</button>
@@ -888,6 +855,7 @@ export default function Home() {
                             <svg className={`w-5 h-5 transform transition-transform ${isExpanded ? 'rotate-180' : 'rotate-0'}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                           </button>
 
+                          {/* quick actions for summary */}
                           <div className="card-actions flex items-center gap-2">
                             <button onClick={() => { navigator.clipboard?.writeText(s.summary_text || ''); showToast('Copied summary', 'success') }} title="Copy" className="p-2 rounded-md hover:bg-slate-50">⎘</button>
                             <button onClick={() => { setConfirmTitle('Delete reflection'); setConfirmDesc('Permanently delete this reflection?'); confirmActionRef.current = async () => { await deleteSavedSummary(s.id) }; setConfirmOpen(true) }} className="p-2 rounded-md hover:bg-rose-50" title="Delete">🗑️</button>
@@ -928,7 +896,7 @@ export default function Home() {
       onConfirm={async () => {
         setConfirmOpen(false)
         try { await confirmActionRef.current() } catch (err) { console.error('confirm action error', err) }
-        finally { confirmActionRef.current = () => {} } // cleanup
+        finally { confirmActionRef.current = () => {} }
       }}
       onCancel={() => { setConfirmOpen(false); confirmActionRef.current = () => {} }}
     />
@@ -955,6 +923,7 @@ export default function Home() {
             <Header user={user} email={email} setEmail={setEmail} signOut={signOut} sendMagicLink={sendMagicLink} signInWithGoogle={signInWithGoogle} streakCount={streakCount} />
           </div>
 
+          {/* Top: 3:1 grid (button left, capsule right) */}
           <div className="ms-top-grid mt-6">
             <div className="flex items-stretch">
               <button onClick={generate24hSummary} disabled={isGenerating} className={`ms-full-height-btn bg-indigo-600 text-white text-base font-medium transition-all duration-300 rounded-lg ${isGenerating ? 'opacity-70 cursor-wait' : 'hover:bg-indigo-700'} ${!isGenerating ? 'animate-shimmer' : ''}`} title="Reflect on your day" >
@@ -963,11 +932,25 @@ export default function Home() {
             </div>
 
             <div className="flex items-stretch">
-              <EntryInput finalText={finalText} setFinalText={(text) => { setFinalText(text); handleTyping() }} interim={interim} isRecording={isRecording} startRecording={startRecording} stopRecording={stopRecording} saveTextEntry={saveTextEntry} status={status} setStatus={setStatus} showToast={showToast} stretch={true} />
+              <EntryInput
+                finalText={finalText}
+                setFinalText={(text) => { setFinalText(text); handleTyping() }}
+                interim={interim}
+                isRecording={isRecording}
+                startRecording={startRecording}
+                stopRecording={stopRecording}
+                saveTextEntry={saveTextEntry}
+                status={status}
+                setStatus={setStatus}
+                showToast={showToast}
+                stretch={true}
+              />
             </div>
           </div>
 
+          {/* Single header row for both columns with density toggle + export */}
           <div className="ms-two-col mt-8 items-start">
+            {/* header left */}
             <div className="ms-column-header flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <span className="text-lg font-semibold text-slate-700">My Reflections</span>
@@ -984,6 +967,7 @@ export default function Home() {
               </div>
             </div>
 
+            {/* header right */}
             <div className="ms-column-header flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <span className="text-lg font-semibold text-slate-700">My Summaries</span>
@@ -995,10 +979,26 @@ export default function Home() {
               </div>
             </div>
 
+            {/* left column */}
             <div>{LeftColumn}</div>
 
+            {/* right column */}
             <div id="your-summaries-section" ref={summariesRef as any}>{RightColumn}</div>
           </div>
+
+          {showOnboarding && (
+            <div className="mt-3 p-3 bg-indigo-600 text-white rounded-md shadow-md max-w-sm">
+              <div className="flex justify-between items-start gap-2">
+                <div>
+                  <div className="font-semibold">Welcome to Mindstream</div>
+                  <div className="text-sm mt-1">Type freely or hold the mic to record. Your voice stays in the browser.</div>
+                </div>
+                <div className="pl-3">
+                  <button onClick={dismissOnboarding} className="text-xs underline">Got it</button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {status && <div className="mt-6 text-sm text-slate-600" aria-live="polite">{status}</div>}
           <div aria-live="polite" aria-atomic="true" className="sr-only">{status}</div>
