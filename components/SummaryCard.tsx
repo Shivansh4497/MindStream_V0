@@ -1,6 +1,5 @@
 // components/SummaryCard.tsx
-import React, { useState, useEffect } from 'react'
-import { markDownLike } from '../lib/ui'
+import React, { useState } from 'react'
 
 type SummaryCardProps = {
   summary: string
@@ -12,12 +11,30 @@ type SummaryCardProps = {
   discardSummary: () => void
 }
 
+/* Minimal XSS-safe markdown converter (escape first, then format) */
+function escapeHTML(s: string) {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+function safeMarkdown(src: string) {
+  const t = escapeHTML(src || '')
+  return t
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/(^|[\s])\*(.+?)\*(?=[\s.,!?:;)]|$)/g, '$1<em>$2</em>')
+    .replace(/(?:^|\n)\s*-\s+(.*)/g, (_m, p1) => `<br/>• ${p1}`)
+    .replace(/(?:^|\n)\s*\d+\.\s+(.*)/g, (_m, p1) => `<br/>• ${p1}`)
+    .replace(/\n/g, '<br/>')
+}
+
 /**
- * SummaryCard (v2)
- * - keeps presentational content non-interactive (pointer-events: none) to avoid accidental intercepts
- * - actions overlay is explicit via .actions-overlay class
- * - local saved flash animation (pulse-ring)
- * - compact/expanded toggle for long summaries
+ * SummaryCard (v2, hardened)
+ * - Presentational block is non-interactive; actions live outside it (no pointer-events traps)
+ * - Local saved flash animation (pulse-ring)
+ * - Compact/expanded toggle for long summaries
  */
 export default function SummaryCard({
   summary,
@@ -41,9 +58,7 @@ export default function SummaryCard({
     try {
       setLocalSaving(true)
       await saveRatedSummary(Number(ratingToSave))
-      // trigger visual pulse
       setSavedFlash(true)
-      // expose aria-active so CSS ring displays on ::after
       setTimeout(() => setSavedFlash(false), 1600)
     } catch (err) {
       console.error('[SummaryCard] save error', err)
@@ -60,7 +75,6 @@ export default function SummaryCard({
     }
   }
 
-  // Compact-first behaviour: if many sections, show only first two by default.
   const visibleSections = expanded ? sections : sections.slice(0, 2)
 
   return (
@@ -83,12 +97,12 @@ export default function SummaryCard({
           onClick={handleDiscard}
           aria-label="Dismiss reflection"
           className="text-xs text-slate-400 underline"
-          style={{ pointerEvents: 'auto' }}
         >
           Dismiss
         </button>
       </div>
 
+      {/* PURELY PRESENTATIONAL BLOCK (non-interactive) */}
       <div className="mt-4 space-y-4 bg-white/80 rounded-md p-5 text-slate-800" style={{ pointerEvents: 'none' }}>
         {visibleSections.map((sec, i) => (
           <div key={i}>
@@ -97,41 +111,39 @@ export default function SummaryCard({
               <h3 className="font-semibold text-indigo-700 text-sm">{sec.title}</h3>
             </div>
             <div className="text-[15px] whitespace-pre-wrap">
-              <div dangerouslySetInnerHTML={{ __html: markDownLike(sec.text) }} />
+              <div dangerouslySetInnerHTML={{ __html: safeMarkdown(sec.text) }} />
             </div>
           </div>
         ))}
-
-        {!expanded && sections.length > 2 && (
-          <div className="mt-1 text-sm">
-            <button
-              type="button"
-              onClick={() => setExpanded(true)}
-              className="text-sm text-indigo-600 underline"
-              style={{ pointerEvents: 'auto' }}
-            >
-              Show full reflection
-            </button>
-          </div>
-        )}
-
-        {expanded && sections.length > 2 && (
-          <div className="mt-1 text-sm">
-            <button
-              type="button"
-              onClick={() => setExpanded(false)}
-              className="text-sm text-slate-600 underline"
-              style={{ pointerEvents: 'auto' }}
-            >
-              Collapse
-            </button>
-          </div>
-        )}
       </div>
 
+      {/* EXPAND / COLLAPSE CONTROLS OUTSIDE NON-INTERACTIVE AREA */}
+      {!expanded && sections.length > 2 && (
+        <div className="mt-2">
+          <button
+            type="button"
+            onClick={() => setExpanded(true)}
+            className="text-sm text-indigo-600 underline"
+          >
+            Show full reflection
+          </button>
+        </div>
+      )}
+      {expanded && sections.length > 2 && (
+        <div className="mt-2">
+          <button
+            type="button"
+            onClick={() => setExpanded(false)}
+            className="text-sm text-slate-600 underline"
+          >
+            Collapse
+          </button>
+        </div>
+      )}
+
       {/* actions overlay */}
-      <div className="actions-overlay" role="region" aria-label="Reflection actions">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div className="actions-overlay mt-4" role="region" aria-label="Reflection actions" style={{ pointerEvents: 'auto' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <div className="text-sm text-slate-600 mr-2">Rate this reflection:</div>
 
           <div style={{ display: 'flex', gap: 8 }}>
@@ -155,7 +167,7 @@ export default function SummaryCard({
                     border: 'none',
                     background: 'transparent',
                     pointerEvents: 'auto',
-                    zIndex: 99999,
+                    zIndex: 10,
                   }}
                 >
                   <span style={{ color: filled ? '#f6c945' : '#cbd5e1' }}>{filled ? '★' : '☆'}</span>
@@ -165,13 +177,12 @@ export default function SummaryCard({
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div className="mt-3" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button
             type="button"
             onClick={handleDiscard}
             className="px-3 py-1 border rounded-md text-sm text-slate-600 bg-white hover:bg-slate-50"
             disabled={localSaving || isSavingRating}
-            style={{ pointerEvents: localSaving || isSavingRating ? 'none' : 'auto', zIndex: 99999 }}
           >
             Discard
           </button>
@@ -181,7 +192,6 @@ export default function SummaryCard({
             onClick={handleSave}
             className="px-3 py-1 bg-indigo-600 text-white rounded-md text-sm hover:bg-indigo-700 disabled:opacity-50"
             disabled={localSaving || isSavingRating}
-            style={{ pointerEvents: localSaving || isSavingRating ? 'none' : 'auto', zIndex: 99999 }}
           >
             {localSaving || isSavingRating ? 'Saving...' : 'Save Reflection'}
           </button>
