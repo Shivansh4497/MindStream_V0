@@ -3,11 +3,12 @@ import React from 'react'
 
 interface HeaderProps {
   user: { id: string; email?: string } | null
-  email: string
-  setEmail: (s: string) => void
-  signOut: () => Promise<void>
-  sendMagicLink: () => Promise<void>
-  signInWithGoogle: () => Promise<void>
+  // make these optional so index.tsx can pass a subset
+  email?: string
+  setEmail?: (s: string) => void
+  signOut: () => Promise<void> | void
+  sendMagicLink?: () => Promise<void> | void
+  signInWithGoogle: () => Promise<void> | void
   streakCount?: number
 }
 
@@ -20,13 +21,11 @@ export default function Header({
   signInWithGoogle,
   streakCount = 0,
 }: HeaderProps) {
-  // helper: extract initial (A, B, C) for avatar
-  const initial = user?.email ? user.email.trim()[0].toUpperCase() : ''
+  const initial = (user?.email || email || '').trim()[0]?.toUpperCase() || ''
 
   return (
     <header className="mb-12">
       <div className="grid grid-cols-1 md:grid-cols-[360px_1fr] gap-6 items-start">
-        {/* LEFT: App title */}
         <div>
           <h1 className="text-4xl font-bold text-indigo-900 leading-tight tracking-tight">
             Mindstream
@@ -36,10 +35,9 @@ export default function Header({
           </p>
         </div>
 
-        {/* RIGHT: unified glass tray */}
         <div className="flex justify-end">
           <div className="flex items-center gap-4 rounded-2xl backdrop-blur-md bg-white/40 border border-white/30 shadow-sm px-5 py-3 flex-wrap">
-            {/* Privacy segment */}
+            {/* Privacy / microcopy */}
             <div className="text-sm text-slate-700 flex items-center gap-2 border-r border-slate-200 pr-4">
               <svg
                 className="w-4 h-4 text-slate-500"
@@ -56,7 +54,7 @@ export default function Header({
               </span>
             </div>
 
-            {/* Streak segment */}
+            {/* streak capsule */}
             <div
               role="status"
               aria-label={streakCount ? `${streakCount}-day streak` : 'No streak yet'}
@@ -73,19 +71,19 @@ export default function Header({
               </div>
             </div>
 
-            {/* Auth segment: show initial circle avatar for privacy */}
+            {/* Auth segment: show initial avatar and sign-in/out */}
             <div className="pl-4 border-l border-slate-200 flex items-center gap-3">
               {user ? (
                 <>
                   <div
                     className="w-10 h-10 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-700 font-semibold"
-                    title={user.email}
+                    title={user.email || email || 'User'}
                     aria-hidden={false}
                   >
                     {initial || 'U'}
                   </div>
                   <button
-                    onClick={signOut}
+                    onClick={() => signOut()}
                     aria-label="Sign out"
                     title="Sign out"
                     className="p-2 rounded-md hover:bg-rose-50 focus:outline-none focus:ring-2 focus:ring-rose-200"
@@ -98,12 +96,11 @@ export default function Header({
                 </>
               ) : (
                 <button
-                  onClick={signInWithGoogle}
+                  onClick={() => signInWithGoogle()}
                   className="flex items-center gap-2 rounded-md bg-white/80 border px-3 py-1 text-sm shadow-sm hover:shadow focus:outline-none focus:ring-2 focus:ring-indigo-200"
                   aria-label="Sign in with Google"
                   title="Sign in with Google"
                 >
-                  {/* Google SVG */}
                   <svg width="18" height="18" viewBox="0 0 533.5 544.3" className="inline-block" aria-hidden>
                     <path fill="#4285f4" d="M533.5 278.4c0-17.4-1.6-34.2-4.6-50.6H272v95.8h147.1c-6.4 34.6-25.6 63.8-54.6 82.5v68.5h88.2c51.6-47.5 81.8-117.6 81.8-196.2z" />
                     <path fill="#34a853" d="M272 544.3c73.6 0 135.4-24.3 180.6-66.1l-88.2-68.5c-24.6 16.5-56 26.2-92.4 26.2-71.1 0-131.4-48-153.1-112.3H29.8v70.8C75.6 482.7 168.8 544.3 272 544.3z" />
