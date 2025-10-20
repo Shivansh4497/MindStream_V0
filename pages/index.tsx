@@ -13,7 +13,7 @@ import {
   randomAffirmation,
 } from '../lib/ui'
 
-/* ---------- small helpers ---------- */
+/* ---------- tiny helpers ---------- */
 const previewText = previewTextUtil
 const renderStarsInline = renderStarsInlineUtil
 
@@ -26,47 +26,24 @@ function escapeHTML(s: string) {
     .replace(/'/g, '&#39;')
 }
 function safeMarkdown(src: string) {
-  // escape first, then allow a tiny subset
   const t = escapeHTML(src || '')
   return t
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>') // bold
-    .replace(/(^|[\s])\*(.+?)\*(?=[\s.,!?:;)]|$)/g, '$1<em>$2</em>') // italic
-    .replace(/(?:^|\n)\s*-\s+(.*)/g, (_m, p1) => `<br/>• ${p1}`) // bullets
-    .replace(/(?:^|\n)\s*\d+\.\s+(.*)/g, (_m, p1) => `<br/>• ${p1}`) // numbers
-    .replace(/\n/g, '<br/>') // line breaks
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/(^|[\s])\*(.+?)\*(?=[\s.,!?:;)]|$)/g, '$1<em>$2</em>')
+    .replace(/(?:^|\n)\s*-\s+(.*)/g, (_m, p1) => `<br/>• ${p1}`)
+    .replace(/(?:^|\n)\s*\d+\.\s+(.*)/g, (_m, p1) => `<br/>• ${p1}`)
+    .replace(/\n/g, '<br/>')
 }
 
 /* ---------- types ---------- */
-type EntryRow = {
-  id: string
-  content: string
-  source?: string
-  user_id?: string
-  created_at?: string
-  pinned?: boolean
-}
-type SummaryRow = {
-  id: string
-  user_id?: string
-  summary_text: string
-  rating?: number
-  for_date?: string
-  created_at?: string
-  range_start?: string
-  range_end?: string
-}
+type EntryRow = { id: string; content: string; source?: string; user_id?: string; created_at?: string; pinned?: boolean }
+type SummaryRow = { id: string; user_id?: string; summary_text: string; rating?: number; for_date?: string; created_at?: string; range_start?: string; range_end?: string }
 
-/* ---------- small modals ---------- */
+/* ---------- confirm modal ---------- */
 function ConfirmModal({
   open, title, description, confirmLabel = 'Delete', cancelLabel = 'Cancel', onConfirm, onCancel,
 }: {
-  open: boolean
-  title: string
-  description?: string
-  confirmLabel?: string
-  cancelLabel?: string
-  onConfirm: () => Promise<void> | void
-  onCancel: () => void
+  open: boolean; title: string; description?: string; confirmLabel?: string; cancelLabel?: string; onConfirm: () => Promise<void> | void; onCancel: () => void
 }) {
   if (!open) return null
   return (
@@ -85,7 +62,7 @@ function ConfirmModal({
 }
 
 /* ===================================================================== */
-/*                                PAGE                                    */
+/*                                  PAGE                                  */
 /* ===================================================================== */
 export default function Home() {
   /* auth + status */
@@ -94,7 +71,7 @@ export default function Home() {
   const [status, setStatus] = useState<string | null>(null)
   const [toast, setToast] = useState<{ text: string; kind?: 'info' | 'success' | 'error' } | null>(null)
 
-  /* ui */
+  /* UI */
   const [isHeaderVisible, setIsHeaderVisible] = useState(true)
   const typingTimeout = useRef<NodeJS.Timeout | null>(null)
   const [density, setDensity] = useState<'comfortable' | 'compact'>(() => {
@@ -121,7 +98,7 @@ export default function Home() {
   const holdingRef = useRef(false)
   const lastStartTimeRef = useRef<number>(0)
 
-  /* ux helpers */
+  /* UX helpers */
   const [hoverRating, setHoverRating] = useState<number>(0)
   const [expandedSummaryId, setExpandedSummaryId] = useState<string | null>(() => {
     try { return localStorage.getItem('expandedSummaryId') } catch { return null }
@@ -134,7 +111,7 @@ export default function Home() {
   }, [expandedSummaryId])
   const [recentlyAddedId, setRecentlyAddedId] = useState<string | null>(null)
 
-  /* confirm modal */
+  /* confirm modal state */
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [confirmTitle, setConfirmTitle] = useState('')
   const [confirmDesc, setConfirmDesc] = useState<string | undefined>(undefined)
@@ -147,7 +124,6 @@ export default function Home() {
   })
   function dismissOnboarding() { try { localStorage.setItem('ms_seen_onboarding', '1') } catch {}; setShowOnboarding(false) }
 
-  /* toasts */
   function showToast(text: string, kind: 'info' | 'success' | 'error' = 'info', ms = 2500) {
     setToast({ text, kind }); window.setTimeout(() => setToast(null), ms)
   }
@@ -189,7 +165,7 @@ export default function Home() {
     showToast('Signed out', 'info')
   }
 
-  /* ---------------- data ops: entries ---------------- */
+  /* ---------------- entries ---------------- */
   const fetchEntries = async () => {
     try {
       const { data: u } = await supabase.auth.getUser()
@@ -261,7 +237,7 @@ export default function Home() {
     setConfirmOpen(true)
   }
 
-  /* ---------------- data ops: summaries ---------------- */
+  /* ---------------- summaries ---------------- */
   const fetchSummaries = async () => {
     try {
       const { data: u } = await supabase.auth.getUser()
@@ -305,7 +281,7 @@ export default function Home() {
     } catch {}
   }
 
-  /* ---------------- header fade on typing ---------------- */
+  /* ---------------- header fade on typing (SINGLE DECLARATION) ---------------- */
   function handleTyping() {
     setIsHeaderVisible(false)
     if (typingTimeout.current) clearTimeout(typingTimeout.current)
@@ -487,7 +463,7 @@ export default function Home() {
     document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url)
   }
 
-  /* ---------------- utils: group entries by date (robust) ---------------- */
+  /* ---------------- grouping ---------------- */
   function groupEntriesByDate(entriesList: EntryRow[]) {
     const byDate: Record<string, EntryRow[]> = {}
     entriesList.forEach((e) => {
@@ -496,29 +472,22 @@ export default function Home() {
       byDate[key].push(e)
     })
     const sorted = Object.keys(byDate).sort((a, b) => new Date(b).getTime() - new Date(a).getTime())
-    // Show Today/Yesterday labels if they exist
+
     const todayKey = new Date().toISOString().slice(0, 10)
-    const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1)
-    const yesterdayKey = yesterday.toISOString().slice(0, 10)
+    const y = new Date(); y.setDate(y.getDate() - 1)
+    const yKey = y.toISOString().slice(0, 10)
 
     const groups: { title: string; items: EntryRow[] }[] = []
     if (byDate[todayKey]) groups.push({ title: 'Today', items: byDate[todayKey] })
-    if (byDate[yesterdayKey]) groups.push({ title: 'Yesterday', items: byDate[yesterdayKey] })
-    sorted.filter((k) => k !== todayKey && k !== yesterdayKey)
+    if (byDate[yKey]) groups.push({ title: 'Yesterday', items: byDate[yKey] })
+    sorted.filter((k) => k !== todayKey && k !== yKey)
           .forEach((k) => groups.push({ title: new Date(k).toLocaleDateString(), items: byDate[k] }))
     return groups
   }
 
-  /* ---------------- typing fade ---------------- */
-  function handleTyping() {
-    setIsHeaderVisible(false)
-    if (typingTimeout.current) clearTimeout(typingTimeout.current)
-    typingTimeout.current = setTimeout(() => setIsHeaderVisible(true), 4000)
-  }
+  /* ---------------- left & right columns ---------------- */
 
-  /* ============================= RENDER ============================= */
-
-  // LEFT COLUMN — NOTE: NO EntryInput here (Option A)
+  // LEFT COLUMN — NO EntryInput here (Option A)
   const LeftColumn = (
     <>
       {generatedSummary && (
@@ -532,7 +501,6 @@ export default function Home() {
           discardSummary={() => { setGeneratedSummary(null); setGeneratedAt(null); showToast('Reflection discarded', 'info') }}
         />
       )}
-
       <section className={`mb-12 ${density === 'compact' ? 'text-sm' : ''}`}>
         <div className="rounded-lg bg-white p-4 border shadow-sm">
           {entries.length === 0 ? (
@@ -605,7 +573,6 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* Expanded body — XSS-safe */}
               <div
                 id={`summary-body-${s.id}`}
                 className="px-4 pb-4 transition-[max-height,opacity] duration-300 ease-in-out overflow-hidden"
@@ -633,7 +600,7 @@ export default function Home() {
         <ToastContainer toast={toast} />
         <DebugOverlayHelper />
 
-        <main className="mx-auto w-full max-w-3xl">
+        <main className="mx-auto w/full max-w-3xl">
           {/* header */}
           <div className={`overflow-hidden transition-all duration-700 ease-in-out ${isHeaderVisible ? 'opacity-100 translate-y-0 max-h-[520px]' : 'opacity-0 -translate-y-3 pointer-events-none max-h-0'}`}>
             <Header
@@ -647,7 +614,7 @@ export default function Home() {
             />
           </div>
 
-          {/* top 3:1 grid — the ONLY EntryInput */}
+          {/* top grid — only EntryInput lives here */}
           <div className="ms-top-grid mt-6">
             <div className="flex items-stretch">
               <button
@@ -736,7 +703,7 @@ export default function Home() {
         description={confirmDesc}
         confirmLabel="Delete"
         cancelLabel="Cancel"
-        onConfirm={async () => { setConfirmOpen(false); try { await (confirmActionRef.current?.()) } finally { confirmActionRef.current = () => {} } }}
+        onConfirm={async () => { setConfirmOpen(false); try { await confirmActionRef.current?.() } finally { confirmActionRef.current = () => {} } }}
         onCancel={() => { setConfirmOpen(false); confirmActionRef.current = () => {} }}
       />
     </>
