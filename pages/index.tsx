@@ -110,7 +110,7 @@ export default function HomePage() {
   const loadEntries = useCallback(async () => {
     try {
       const { data, error } = await supabase
-        .from<Entry>('entries')
+        .from('entries')
         .select('*')
         .order('created_at', { ascending: false })
       if (error) throw error
@@ -124,7 +124,7 @@ export default function HomePage() {
   const loadSummaries = useCallback(async () => {
     try {
       const { data, error } = await supabase
-        .from<Summary>('summaries')
+        .from('summaries')
         .select('*')
         .order('created_at', { ascending: false })
       if (error) throw error
