@@ -7,10 +7,7 @@ import SummaryCard from '../components/SummaryCard'
 import ToastContainer from '../components/ToastContainer'
 import EmptyState from '../components/EmptyState'
 import DebugOverlayHelper from '../components/DebugOverlayHelper'
-import TwoColumnLayout from '../components/TwoColumnLayout'
-import RecordingPulse from '../components/RecordingPulse'
 import { supabase } from '../lib/supabaseClient'
-import { markDownLike } from '../lib/ui'
 
 type Entry = {
   id: string
@@ -39,7 +36,9 @@ export default function HomePage() {
   const [finalText, setFinalText] = useState('')
   const [interim, setInterim] = useState('')
   const [isRecording, setIsRecording] = useState(false)
-  const [status, setStatus] = useState<string | null>(null)
+  // renamed to avoid collisions
+  const [status, setLocalStatus] = useState<string | null>(null)
+
   const [toast, setToast] = useState<{ text: string; kind?: 'info' | 'success' | 'error' } | null>(null)
   const [hoverRating, setHoverRating] = useState(0)
   const [isSavingRating, setIsSavingRating] = useState(false)
@@ -61,7 +60,6 @@ export default function HomePage() {
   // --------------------------
   useEffect(() => {
     mountedRef.current = true
-    // initial session
     const init = async () => {
       try {
         const {
@@ -86,7 +84,6 @@ export default function HomePage() {
   const signInWithGoogle = useCallback(async () => {
     try {
       await supabase.auth.signInWithOAuth({ provider: 'google' })
-      // Supabase will redirect; onAuthStateChange will set user.
     } catch (err) {
       console.error('Google sign-in error', err)
       showToast('Failed to sign in with Google', 'error')
@@ -149,16 +146,8 @@ export default function HomePage() {
   }, [loadEntries, loadSummaries, user])
 
   // --------------------------
-  // Save entry + generate AI summary (FIXED)
+  // Save entry + generate AI summary (strict DB confirmation)
   // --------------------------
-  /**
-   * saveTextEntry:
-   * - Waits for supabase insert to confirm
-   * - Only shows success toast AFTER insert succeeds
-   * - If insert fails, shows a clear error toast and logs the supabase error
-   *
-   * Important: returns a Promise<void> that resolves after DB write completes (or rejects on fatal error)
-   */
   const saveTextEntry = useCallback(
     async (text: string, source: string = 'typed'): Promise<void> => {
       const trimmed = text?.trim()
@@ -167,9 +156,8 @@ export default function HomePage() {
         return
       }
 
-      setStatus('Saving entry…')
+      setLocalStatus('Saving entry…')
       try {
-        // Insert into entries table
         const payload = {
           text: trimmed,
           user_id: user?.id ?? null,
@@ -177,15 +165,13 @@ export default function HomePage() {
         const { data, error } = await supabase.from('entries').insert(payload).select().single()
 
         if (error) {
-          // Detailed logging for debugging RLS / validation issues
           console.error('supabase insert entries error:', error)
-          // If RLS denies: show actionable message
           if ((error as any)?.message?.toLowerCase().includes('rbac') || (error as any)?.message?.toLowerCase().includes('permission') || (error as any)?.details?.toLowerCase?.()?.includes('rls')) {
             showToast('Save failed: permission denied (RLS). Check Supabase Row Level Security and auth.', 'error')
           } else {
             showToast('Failed to save entry', 'error')
           }
-          setStatus(null)
+          setLocalStatus(null)
           throw error
         }
 
@@ -193,7 +179,7 @@ export default function HomePage() {
         if (!inserted || !inserted.id) {
           console.error('Insert returned no inserted row', data)
           showToast('Failed to save entry (no data returned)', 'error')
-          setStatus(null)
+          setLocalStatus(null)
           throw new Error('No inserted row returned')
         }
 
@@ -201,10 +187,10 @@ export default function HomePage() {
         setEntries((s) => [inserted, ...s])
         setFinalText('')
         showToast('Entry saved', 'success')
-        setStatus(null)
+        setLocalStatus(null)
 
-        // Kick off summary generation in background; do not block save UX
-        (async () => {
+        // Kick off summary generation in background
+        ;(async () => {
           try {
             const res = await fetch('/api/generate-summary', {
               method: 'POST',
@@ -213,11 +199,9 @@ export default function HomePage() {
             })
             const json = await res.json().catch(() => null)
             if (json?.savedSummary) {
-              // server persisted the summary — refresh
               await loadSummaries()
               showToast('AI reflection created', 'success')
             } else if (json?.summary) {
-              // fallback client insert (try)
               const fallback = {
                 entry_id: inserted.id,
                 summary: json.summary,
@@ -236,8 +220,7 @@ export default function HomePage() {
 
         return
       } catch (err) {
-        // Bubble up for callers if needed
-        setStatus(null)
+        setLocalStatus(null)
         throw err
       }
     },
@@ -348,15 +331,13 @@ export default function HomePage() {
   // --------------------------
   const startRecording = useCallback(() => {
     setIsRecording(true)
-    setStatus('Recording…')
-    // Expect external transcription service to set `interim` and `finalText` via callbacks you already have in your app
+    setLocalStatus('Recording…')
   }, [])
 
   const stopRecording = useCallback(() => {
     setIsRecording(false)
-    setStatus('Processing transcription…')
-    // Post-process: final text should have been set by your transcription callbacks. Clear status shortly.
-    setTimeout(() => setStatus(null), 600)
+    setLocalStatus('Processing transcription…')
+    setTimeout(() => setLocalStatus(null), 600)
   }, [])
 
   // --------------------------
@@ -480,7 +461,7 @@ export default function HomePage() {
               stopRecording={stopRecording}
               saveTextEntry={saveTextEntry}
               status={status}
-              setStatus={setStatus}
+              setStatus={setLocalStatus}
               showToast={(t, k) => showToast(t, k)}
               stretch={true}
             />
@@ -524,7 +505,6 @@ export default function HomePage() {
                           <div className="flex items-center justify-between">
                             <div className="text-xs text-slate-400">{new Date(e.created_at).toLocaleString()}</div>
                             <div className="flex items-center gap-2">
-                              {/* example small action icons — keep as simple placeholders */}
                               <button
                                 title="Edit"
                                 onClick={() => {
