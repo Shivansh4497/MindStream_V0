@@ -1,5 +1,5 @@
 // components/EntryInput.tsx
-import React, { useRef, useEffect } from 'react'
+import React, { useRef, useEffect, useState } from 'react'
 import RecordingPulse from './RecordingPulse'
 
 type EntryInputProps = {
@@ -18,10 +18,9 @@ type EntryInputProps = {
 }
 
 /**
- * EntryInput
- * Single top-level input used for typed or transcribed entries.
- * - `stretch` (optional): when true, the input will take remaining space and the action
- *   column will keep a fixed width, useful for side-by-side layouts.
+ * EntryInput (v2)
+ * - local saved flash animation on successful save (pulse-ring)
+ * - gentle breathing animation on record control when idle
  */
 export default function EntryInput({
   finalText,
@@ -38,6 +37,8 @@ export default function EntryInput({
 }: EntryInputProps) {
   const inputElRef = useRef<HTMLInputElement | null>(null)
   const textareaElRef = useRef<HTMLTextAreaElement | null>(null)
+  const [savedFlash, setSavedFlash] = useState(false)
+  const [localSaving, setLocalSaving] = useState(false)
 
   useEffect(() => {
     const el = textareaElRef.current || inputElRef.current
@@ -49,10 +50,28 @@ export default function EntryInput({
     }
   }, [])
 
-  const canSave = (finalText || '').trim().length > 0 && !isRecording
+  const canSave = (finalText || '').trim().length > 0 && !isRecording && !localSaving
+
+  async function handleSaveClick() {
+    if (!canSave) return
+    try {
+      setLocalSaving(true)
+      await saveTextEntry(finalText, 'typed')
+      setSavedFlash(true)
+      setStatus?.('Saved.')
+      showToast?.('Reflection saved', 'success')
+      setTimeout(() => setSavedFlash(false), 1500)
+      setFinalText('')
+    } catch (err) {
+      console.error('[EntryInput] save error', err)
+      showToast?.('Failed to save reflection', 'error')
+    } finally {
+      setLocalSaving(false)
+    }
+  }
 
   return (
-    <div className="mb-8">
+    <div className={`mb-8 ${savedFlash ? 'pulse-ring' : ''}`} aria-active={savedFlash ? 'true' : 'false'}>
       <div className={`flex gap-4 items-start ${stretch ? 'w-full' : ''}`}>
         {/* Input area: grows when stretch === true */}
         <div className={`${stretch ? 'flex-1' : 'flex-1'} `}>
@@ -95,10 +114,11 @@ export default function EntryInput({
                 </button>
                 <button
                   type="button"
-                  onClick={() => saveTextEntry(finalText)}
-                  className="px-3 py-1 bg-indigo-600 text-white rounded-md text-sm"
+                  onClick={handleSaveClick}
+                  disabled={!canSave}
+                  className="px-3 py-1 bg-indigo-600 text-white rounded-md text-sm disabled:opacity-50"
                 >
-                  Save transcription
+                  {localSaving ? 'Saving…' : 'Save transcription'}
                 </button>
               </div>
             </div>
@@ -113,12 +133,12 @@ export default function EntryInput({
         <div className="flex flex-col gap-3 w-36">
           <button
             type="button"
-            onClick={() => saveTextEntry(finalText)}
+            onClick={handleSaveClick}
             disabled={!canSave}
-            className="rounded-xl bg-indigo-700 text-white px-4 py-3 disabled:opacity-50 shadow"
+            className="rounded-xl bg-indigo-700 text-white px-4 py-3 disabled:opacity-50 shadow ms-full-height-btn"
             aria-disabled={!canSave}
           >
-            Save
+            {localSaving ? 'Saving…' : 'Save'}
           </button>
 
           <button
@@ -139,7 +159,7 @@ export default function EntryInput({
               e.preventDefault()
               stopRecording()
             }}
-            className={`rounded-xl px-4 py-3 text-sm transition-shadow ${isRecording ? 'bg-teal-500 text-white shadow-lg' : 'bg-white border shadow'}`}
+            className={`rounded-xl px-4 py-3 text-sm transition-shadow ${isRecording ? 'bg-teal-500 text-white shadow-lg' : 'bg-white border shadow'} ${!isRecording ? 'breath' : ''}`}
             title="Hold to record"
             aria-pressed={isRecording}
           >
