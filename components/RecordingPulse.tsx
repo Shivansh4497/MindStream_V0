@@ -6,8 +6,10 @@ type RecordingPulseProps = {
 }
 
 /**
- * Small recording UI: animated bars + timer.
- * Self-contained styles for keyframes to keep integration simple.
+ * RecordingPulse (v2)
+ * - animated bars + timer
+ * - reduced-motion safe
+ * - subtle entry fade on start
  */
 export default function RecordingPulse({ isRecording }: RecordingPulseProps) {
   const [seconds, setSeconds] = useState(0)
@@ -41,9 +43,13 @@ export default function RecordingPulse({ isRecording }: RecordingPulseProps) {
     <div className="flex items-center gap-3">
       <style>{`
         @keyframes pulseBar {
-          0% { transform: scaleY(0.4); opacity: 0.6; }
+          0% { transform: scaleY(0.5); opacity: 0.6; }
           50% { transform: scaleY(1.0); opacity: 1; }
-          100% { transform: scaleY(0.4); opacity: 0.6; }
+          100% { transform: scaleY(0.5); opacity: 0.6; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .rp-animate { animation: none !important; }
         }
       `}</style>
 
@@ -55,9 +61,9 @@ export default function RecordingPulse({ isRecording }: RecordingPulseProps) {
           {[0, 1, 2].map((i) => (
             <div
               key={i}
-              className="w-1.5 bg-teal-500 rounded"
+              className={`w-1.5 bg-teal-500 rounded ${isRecording ? 'rp-animate' : ''}`}
               style={{
-                height: `${8 + i * 4}px`,
+                height: `${8 + i * 5}px`,
                 transformOrigin: 'bottom',
                 animation: isRecording ? `pulseBar 900ms ${i * 120}ms ease-in-out infinite` : 'none'
               }}
