@@ -1,5 +1,5 @@
 // components/SummaryCard.tsx
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { markDownLike } from '../lib/ui'
 
 type SummaryCardProps = {
@@ -13,10 +13,11 @@ type SummaryCardProps = {
 }
 
 /**
- * SummaryCard
- * - Renders AI-generated summary sections
- * - Places interactive controls (stars, Save, Discard) into an absolutely positioned overlay
- *   to guarantee they receive pointer events and are not blocked by content areas.
+ * SummaryCard (v2)
+ * - keeps presentational content non-interactive (pointer-events: none) to avoid accidental intercepts
+ * - actions overlay is explicit via .actions-overlay class
+ * - local saved flash animation (pulse-ring)
+ * - compact/expanded toggle for long summaries
  */
 export default function SummaryCard({
   summary,
@@ -29,6 +30,8 @@ export default function SummaryCard({
 }: SummaryCardProps) {
   const [selectedRating, setSelectedRating] = useState<number | null>(null)
   const [localSaving, setLocalSaving] = useState(false)
+  const [savedFlash, setSavedFlash] = useState(false)
+  const [expanded, setExpanded] = useState(false)
 
   const sections = parseSummary(summary)
 
@@ -38,6 +41,10 @@ export default function SummaryCard({
     try {
       setLocalSaving(true)
       await saveRatedSummary(Number(ratingToSave))
+      // trigger visual pulse
+      setSavedFlash(true)
+      // expose aria-active so CSS ring displays on ::after
+      setTimeout(() => setSavedFlash(false), 1600)
     } catch (err) {
       console.error('[SummaryCard] save error', err)
     } finally {
@@ -53,14 +60,16 @@ export default function SummaryCard({
     }
   }
 
+  // Compact-first behaviour: if many sections, show only first two by default.
+  const visibleSections = expanded ? sections : sections.slice(0, 2)
+
   return (
     <div
-      className="mb-8 relative rounded-lg border bg-gradient-to-b from-indigo-50/60 to-white p-5 shadow-md transition-opacity duration-300 ease-out"
-      // create local stacking context (translateZ hack) so absolute overlay behaves predictably
-      style={{ WebkitTransform: 'translateZ(0)' }}
+      className={`mb-8 relative rounded-lg border bg-gradient-to-b from-indigo-50/60 to-white p-5 shadow-md transition-opacity duration-300 ease-out ${savedFlash ? 'pulse-ring' : ''}`}
       aria-live="polite"
+      aria-active={savedFlash ? 'true' : 'false'}
+      style={{ WebkitTransform: 'translateZ(0)' }}
     >
-      {/* Top area: headline + small dismiss link */}
       <div className="flex items-start justify-between">
         <div>
           <div className="text-sm font-semibold text-indigo-800">
@@ -80,9 +89,8 @@ export default function SummaryCard({
         </button>
       </div>
 
-      {/* Content: the textual sections. Keep it purely presentational (non-interactive) so it can't intercept clicks */}
       <div className="mt-4 space-y-4 bg-white/80 rounded-md p-5 text-slate-800" style={{ pointerEvents: 'none' }}>
-        {sections.map((sec, i) => (
+        {visibleSections.map((sec, i) => (
           <div key={i}>
             <div className="flex items-center gap-2 mb-1">
               <span className="text-lg">{sec.icon}</span>
@@ -93,26 +101,36 @@ export default function SummaryCard({
             </div>
           </div>
         ))}
+
+        {!expanded && sections.length > 2 && (
+          <div className="mt-1 text-sm">
+            <button
+              type="button"
+              onClick={() => setExpanded(true)}
+              className="text-sm text-indigo-600 underline"
+              style={{ pointerEvents: 'auto' }}
+            >
+              Show full reflection
+            </button>
+          </div>
+        )}
+
+        {expanded && sections.length > 2 && (
+          <div className="mt-1 text-sm">
+            <button
+              type="button"
+              onClick={() => setExpanded(false)}
+              className="text-sm text-slate-600 underline"
+              style={{ pointerEvents: 'auto' }}
+            >
+              Collapse
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* ACTIONS OVERLAY
-          Rendered as an absolutely positioned overlay inside the card container.
-          This overlay has pointer-events enabled and a high z-index so it reliably receives clicks.
-      */}
-      <div
-        className="absolute left-0 right-0 bottom-3 px-6"
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 12,
-          position: 'absolute',
-          zIndex: 99999,
-          pointerEvents: 'auto',
-          justifyContent: 'space-between',
-        }}
-        role="region"
-        aria-label="Reflection actions"
-      >
+      {/* actions overlay */}
+      <div className="actions-overlay" role="region" aria-label="Reflection actions">
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <div className="text-sm text-slate-600 mr-2">Rate this reflection:</div>
 
