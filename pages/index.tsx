@@ -113,8 +113,11 @@ export default function HomePage() {
         .from('entries')
         .select('*')
         .order('created_at', { ascending: false })
-      if (error) throw error
-      setEntries(data ?? [])
+      if (error) {
+        console.error('loadEntries supabase error:', error)
+        throw error
+      }
+      setEntries((data ?? []) as Entry[])
     } catch (err) {
       console.error('loadEntries error', err)
       showToast('Failed to load entries', 'error')
@@ -127,8 +130,11 @@ export default function HomePage() {
         .from('summaries')
         .select('*')
         .order('created_at', { ascending: false })
-      if (error) throw error
-      setSummaries(data ?? [])
+      if (error) {
+        console.error('loadSummaries supabase error:', error)
+        throw error
+      }
+      setSummaries((data ?? []) as Summary[])
     } catch (err) {
       console.error('loadSummaries error', err)
       showToast('Failed to load summaries', 'error')
@@ -143,66 +149,94 @@ export default function HomePage() {
   }, [loadEntries, loadSummaries, user])
 
   // --------------------------
-  // Save entry + generate AI summary
+  // Save entry + generate AI summary (FIXED)
   // --------------------------
+  /**
+   * saveTextEntry:
+   * - Waits for supabase insert to confirm
+   * - Only shows success toast AFTER insert succeeds
+   * - If insert fails, shows a clear error toast and logs the supabase error
+   *
+   * Important: returns a Promise<void> that resolves after DB write completes (or rejects on fatal error)
+   */
   const saveTextEntry = useCallback(
-    async (text: string, source: string = 'typed') => {
+    async (text: string, source: string = 'typed'): Promise<void> => {
       const trimmed = text?.trim()
       if (!trimmed) {
         showToast('Nothing to save', 'info')
         return
       }
 
+      setStatus('Saving entry…')
       try {
-        setStatus('Saving entry…')
+        // Insert into entries table
         const payload = {
           text: trimmed,
           user_id: user?.id ?? null,
         }
         const { data, error } = await supabase.from('entries').insert(payload).select().single()
-        if (error) throw error
-        const inserted: Entry = data
-        // optimistic UI: prepend entry
-        setEntries((s) => [inserted, ...s])
 
+        if (error) {
+          // Detailed logging for debugging RLS / validation issues
+          console.error('supabase insert entries error:', error)
+          // If RLS denies: show actionable message
+          if ((error as any)?.message?.toLowerCase().includes('rbac') || (error as any)?.message?.toLowerCase().includes('permission') || (error as any)?.details?.toLowerCase?.()?.includes('rls')) {
+            showToast('Save failed: permission denied (RLS). Check Supabase Row Level Security and auth.', 'error')
+          } else {
+            showToast('Failed to save entry', 'error')
+          }
+          setStatus(null)
+          throw error
+        }
+
+        const inserted = data as Entry
+        if (!inserted || !inserted.id) {
+          console.error('Insert returned no inserted row', data)
+          showToast('Failed to save entry (no data returned)', 'error')
+          setStatus(null)
+          throw new Error('No inserted row returned')
+        }
+
+        // Confirmed persisted — now update UI
+        setEntries((s) => [inserted, ...s])
         setFinalText('')
         showToast('Entry saved', 'success')
         setStatus(null)
 
-        // Generate summary (call backend API which may also persist to summaries table)
-        try {
-          // POST to your API route (server-side should call your Groq model, persist to DB)
-          const res = await fetch('/api/generate-summary', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ entryId: inserted.id, text: inserted.text }),
-          })
-          const json = await res.json()
-          // Expect API to return { summary: string, savedSummary?: { id, summary, created_at } }
-          if (json?.savedSummary) {
-            // if server persisted the summary, refresh list
-            await loadSummaries()
-            showToast('AI reflection created', 'success')
-          } else if (json?.summary) {
-            // fallback: insert locally (try to persist to DB client-side if desired)
-            const fallback = {
-              entry_id: inserted.id,
-              summary: json.summary,
-              created_at: new Date().toISOString(),
-            }
-            const { data: sdata, error: serror } = await supabase.from('summaries').insert(fallback).select().single()
-            if (!serror) {
-              setSummaries((prev) => [sdata as Summary, ...(prev ?? [])])
+        // Kick off summary generation in background; do not block save UX
+        (async () => {
+          try {
+            const res = await fetch('/api/generate-summary', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ entryId: inserted.id, text: inserted.text }),
+            })
+            const json = await res.json().catch(() => null)
+            if (json?.savedSummary) {
+              // server persisted the summary — refresh
+              await loadSummaries()
               showToast('AI reflection created', 'success')
+            } else if (json?.summary) {
+              // fallback client insert (try)
+              const fallback = {
+                entry_id: inserted.id,
+                summary: json.summary,
+                created_at: new Date().toISOString(),
+              }
+              const { data: sdata, error: serror } = await supabase.from('summaries').insert(fallback).select().single()
+              if (!serror && sdata) {
+                setSummaries((prev) => [sdata as Summary, ...(prev ?? [])])
+                showToast('AI reflection created', 'success')
+              }
             }
+          } catch (err) {
+            console.warn('generate-summary background error', err)
           }
-        } catch (err) {
-          console.warn('generate-summary warning', err)
-          // Not fatal — keep UX stable
-        }
+        })()
+
+        return
       } catch (err) {
-        console.error('saveTextEntry error', err)
-        showToast('Failed to save entry', 'error')
+        // Bubble up for callers if needed
         setStatus(null)
         throw err
       }
@@ -218,8 +252,11 @@ export default function HomePage() {
       try {
         setIsSavingRating(true)
         const { error } = await supabase.from('summaries').update({ rating }).eq('id', summaryId)
-        if (error) throw error
-        // optimistic update
+        if (error) {
+          console.error('saveRatedSummary supabase error:', error)
+          showToast('Failed to save rating', 'error')
+          return
+        }
         setSummaries((s) => s.map((x) => (x.id === summaryId ? { ...x, rating } : x)))
         showToast('Reflection rating saved', 'success')
       } catch (err) {
@@ -235,9 +272,12 @@ export default function HomePage() {
   const discardSummary = useCallback(
     async (summaryId: string) => {
       try {
-        // remove from DB
         const { error } = await supabase.from('summaries').delete().eq('id', summaryId)
-        if (error) throw error
+        if (error) {
+          console.error('discardSummary supabase error:', error)
+          showToast('Failed to discard reflection', 'error')
+          return
+        }
         setSummaries((s) => s.filter((x) => x.id !== summaryId))
         showToast('Reflection discarded', 'info')
       } catch (err) {
@@ -359,8 +399,6 @@ export default function HomePage() {
   // --------------------------
   useEffect(() => {
     if (entries.length === 0) {
-      // do not overwrite if DB already has data; this is just temporary filler
-      // Only insert demo entries when the DB is empty and we are in dev
       if (process.env.NODE_ENV === 'development') {
         setEntries([
           { id: 'd1', text: 'So today we will try to solve some more UI issues…', created_at: '2025-10-18T19:29:58Z' },
@@ -389,7 +427,6 @@ export default function HomePage() {
           <div className="mt-2 flex gap-2">
             <button
               onClick={() => {
-                // focus main input if available
                 const el = document.querySelector<HTMLInputElement | HTMLTextAreaElement>('input[aria-label="Quick thought input"], textarea[aria-label="Edit transcription"]')
                 el?.focus()
                 setShowIdlePrompt(false)
