@@ -1,95 +1,138 @@
-/* styles/globals.css */
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* styles/globals.css
+   Mindstream global styles + accessibility + micro-interactions
+   Keep this calm, low-contrast, and respectful of prefers-reduced-motion.
+*/
 
-html,body,#__next { height: 100%; }
+/* base reset / system fonts */
+:root {
+  --bg: #f1f6fb;
+  --card: #ffffff;
+  --muted: #94a3b8;
+  --brand-indigo: #4f46e5;
+  --brand-teal: #0d9488;
+  --soft-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
+  --calm-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
+}
+
+html, body, #__next {
+  height: 100%;
+}
 
 body {
-  @apply bg-indigo-50 text-slate-800 antialiased;
-  font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  background: radial-gradient(1000px 400px at 10% 10%, rgba(79,70,229,0.04), transparent),
+              radial-gradient(900px 300px at 90% 90%, rgba(14,165,233,0.02), transparent),
+              var(--bg);
+  color: #0f172a;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-tap-highlight-color: transparent;
+  margin: 0;
 }
 
-/* gentle palette helpers */
-:root{
-  --ms-indigo: 99 102 241; /* indigo-500 for glows */
-  --ms-teal: 45 212 191;
-}
-
-/* animations */
-@keyframes softPulse {
-  0% { box-shadow: 0 0 0 0 rgba(45,212,191,0.18); }
-  70% { box-shadow: 0 0 0 18px rgba(45,212,191,0); }
-  100% { box-shadow: 0 0 0 0 rgba(45,212,191,0); }
-}
-@keyframes shimmer {
-  0% { box-shadow: 0 0 0 0 rgba(99,102,241,0.12); }
-  50% { box-shadow: 0 0 12px 6px rgba(99,102,241,0.08); }
-  100% { box-shadow: 0 0 0 0 rgba(99,102,241,0.12); }
-}
-@keyframes fadeIn { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: translateY(0) } }
-
-.animate-shimmer { animation: shimmer 4s ease-in-out infinite; }
-.animate-fadeIn { animation: fadeIn 0.6s ease-in-out forwards; }
-.pulse-ring { animation: softPulse 1.6s ease-out; }
-
-/* Main container niceties */
-main { max-width: 1100px; margin: 0 auto; }
-
-/* Card look used across entries and summaries */
-.ms-card {
-  border-radius: 14px;
-  box-shadow: 0 6px 18px rgba(15,23,42,0.04);
-  border: 1px solid rgba(15,23,42,0.05);
-  background: white;
-}
-
-/* compact list card styling */
-.ms-compact-card {
-  @apply rounded-lg p-4 bg-white border;
+/* Utility: calm rounded cards */
+.card {
+  background: var(--card);
   border-radius: 12px;
-  box-shadow: 0 6px 12px rgba(15,23,42,0.03);
+  box-shadow: var(--soft-shadow);
 }
 
-/* make small interactive icons visually consistent */
-.ms-icon-btn {
-  @apply inline-flex items-center justify-center w-9 h-9 rounded-md bg-white border text-slate-500;
+/* Small motion utilities */
+@keyframes ms-fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
-/* prevent presentation overlay from blocking control clicks */
-*[class*="SummaryCard"],
-button,
-[role="button"],
-input,
-textarea {
-  pointer-events: auto !important;
+@keyframes ms-softPulse {
+  0% { transform: scale(1); opacity: 1; }
+  40% { transform: scale(1.03); opacity: 0.95; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* subtle ring pulse used on save / streak */
+.pulse-ring {
   position: relative;
-  z-index: 10;
+  animation: ms-softPulse 1400ms ease-out 1;
+  will-change: transform, opacity;
+  /* an outer ring (visual only) */
+}
+.pulse-ring::after {
+  content: "";
+  position: absolute;
+  inset: -8px;
+  border-radius: 14px;
+  box-shadow: 0 8px 22px rgba(13,148,136,0.08);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 260ms ease-out;
+}
+.pulse-ring[aria-active="true"]::after {
+  opacity: 1;
 }
 
-/* Prevent invisible overlay divs from blocking clicks */
-div[style*="opacity: 0"],
-div[style*="max-height: 0"] {
-  pointer-events: none !important;
+/* breathing (very subtle) */
+@keyframes ms-breath {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.01); opacity: 0.98; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.breath {
+  animation: ms-breath 3000ms ease-in-out infinite;
 }
 
-/* Subtle headings */
-.section-heading {
-  font-weight: 600;
-  color: #1f2937;
+/* shimmer (only on hover or when explicitly applied) */
+@keyframes ms-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.shimmer {
+  background-image: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.5) 50%, rgba(255,255,255,0) 100%);
+  background-size: 200% 100%;
+  animation: ms-shimmer 1200ms linear 1;
 }
 
-/* compact two-column layout for reflections & summaries */
-.two-column {
-  display: grid;
-  grid-template-columns: 1fr 420px;
-  gap: 32px;
-  align-items: start;
+/* button hover affordance for primary CTAs */
+.ms-full-height-btn {
+  transition: transform .14s cubic-bezier(.2,.9,.3,1), box-shadow .14s ease;
+  will-change: transform, box-shadow;
+}
+.ms-full-height-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 30px rgba(79,70,229,0.08);
 }
 
-/* Summary list container look */
-.summaries-wrapper {
-  @apply rounded-xl bg-white p-5 border;
-  border-radius: 12px;
-  box-shadow: 0 8px 18px rgba(15,23,42,0.03);
+/* toast transitions adjusted for calm movement */
+.ms-toast-enter { opacity: 0; transform: translateY(-6px) scale(.99); }
+.ms-toast-enter-active { opacity: 1; transform: translateY(0) scale(1); transition: all 180ms ease-out; }
+.ms-toast-exit { opacity: 1; transform: translateY(0); }
+.ms-toast-exit-active { opacity: 0; transform: translateY(-6px) scale(.99); transition: all 140ms ease-in; }
+
+/* card compact density */
+.summary-compact {
+  padding: 12px;
+  border-radius: 10px;
 }
+
+/* overlay actions */
+.actions-overlay {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  z-index: 99999;
+  pointer-events: auto;
+}
+
+/* reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .pulse-ring, .breath, .shimmer, .ms-fadeIn { animation: none !important; transition: none !important; }
+  .ms-full-height-btn:hover { transform: none; box-shadow: none; }
+}
+
+/* small helpers */
+.text-muted { color: #94a3b8; }
+.small { font-size: 13px; }
