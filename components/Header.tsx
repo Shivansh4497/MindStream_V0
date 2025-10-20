@@ -1,5 +1,5 @@
 // components/Header.tsx
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 
 interface HeaderProps {
   user: { id: string; email?: string } | null
@@ -22,6 +22,19 @@ export default function Header({
   streakCount = 0,
 }: HeaderProps) {
   const initial = (user?.email || email || '').trim()[0]?.toUpperCase() || ''
+  const [streakPulse, setStreakPulse] = useState(false)
+  const [pulseTriggered, setPulseTriggered] = useState(false)
+
+  useEffect(() => {
+    // trigger a single warm pulse when the streak is present on first mount
+    if (streakCount && !pulseTriggered) {
+      setTimeout(() => {
+        setStreakPulse(true)
+        setTimeout(() => setStreakPulse(false), 1400)
+      }, 350)
+      setPulseTriggered(true)
+    }
+  }, [streakCount, pulseTriggered])
 
   return (
     <header className="mb-12">
@@ -59,7 +72,7 @@ export default function Header({
               role="status"
               aria-label={streakCount ? `${streakCount}-day streak` : 'No streak yet'}
               title={streakCount ? `${streakCount}-day streak` : 'No streak yet'}
-              className="flex items-center justify-center w-16 h-16 rounded-full border-2 border-teal-200 bg-white/70 shadow-inner text-center"
+              className={`flex items-center justify-center w-16 h-16 rounded-full border-2 border-teal-200 bg-white/70 shadow-inner text-center ${streakPulse ? 'pulse-ring' : ''}`}
             >
               <div>
                 <div className="text-[11px] text-slate-500 uppercase tracking-wide">
