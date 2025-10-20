@@ -1,5 +1,5 @@
 // components/ToastContainer.tsx
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 
 export type ToastState = { text: string; kind?: 'info' | 'success' | 'error' } | null
 
@@ -27,6 +27,17 @@ export default function ToastContainer({ toast }: { toast: ToastState }) {
     }
   }, [toast])
 
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape' || e.key === 'Esc') {
+        setVisible(false)
+        setTimeout(() => setInner(null), 180)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
   if (!inner) return null
 
   const { text, kind = 'info' } = inner
@@ -48,9 +59,10 @@ export default function ToastContainer({ toast }: { toast: ToastState }) {
     // aria-live region helps screen readers announce toast messages
     <div aria-live="polite" className="fixed top-6 right-6 z-50 pointer-events-none">
       <div
-        className={`pointer-events-auto transform transition-all duration-200 ${
-          visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'
-        }`}
+        className={`pointer-events-auto transform transition-all duration-200 ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'}`}
+        role="status"
+        tabIndex={0}
+        aria-atomic="true"
       >
         <div className={`flex items-center text-white ${bg} px-3 py-2 rounded-md shadow-md text-sm min-w-[220px]`}>
           {icon}
