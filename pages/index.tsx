@@ -1,60 +1,78 @@
 // pages/index.tsx
 import React, { useEffect, useRef, useState } from 'react'
-import { supabase } from '../lib/supabaseClient'
 import Head from 'next/head'
+import { supabase } from '../lib/supabaseClient'
 import Header from '../components/Header'
 import EntryInput from '../components/EntryInput'
-import ToastContainer from '../components/ToastContainer'
 import SummaryCard from '../components/SummaryCard'
+import ToastContainer from '../components/ToastContainer'
 import DebugOverlayHelper from '../components/DebugOverlayHelper'
-
 import {
   previewText as previewTextUtil,
-  formatDateForGroup as formatDateForGroupUtil,
   renderStarsInline as renderStarsInlineUtil,
-  randomAffirmation
+  randomAffirmation,
 } from '../lib/ui'
 
-declare global {
-  interface Window {
-    webkitSpeechRecognition?: any
-    SpeechRecognition?: any
-    __ms_entry_input_rendered?: boolean
-  }
+/* ---------- small helpers ---------- */
+const previewText = previewTextUtil
+const renderStarsInline = renderStarsInlineUtil
+
+function escapeHTML(s: string) {
+  return (s || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+function safeMarkdown(src: string) {
+  // escape first, then allow a tiny subset
+  const t = escapeHTML(src || '')
+  return t
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>') // bold
+    .replace(/(^|[\s])\*(.+?)\*(?=[\s.,!?:;)]|$)/g, '$1<em>$2</em>') // italic
+    .replace(/(?:^|\n)\s*-\s+(.*)/g, (_m, p1) => `<br/>• ${p1}`) // bullets
+    .replace(/(?:^|\n)\s*\d+\.\s+(.*)/g, (_m, p1) => `<br/>• ${p1}`) // numbers
+    .replace(/\n/g, '<br/>') // line breaks
 }
 
 /* ---------- types ---------- */
-type EntryRow = { id: string; content: string; source?: string; user_id?: string; created_at?: string; pinned?: boolean }
-type SummaryRow = { id: string; user_id?: string; summary_text: string; rating?: number; for_date?: string; created_at?: string; range_start?: string; range_end?: string }
-
-/* ---------- util aliases ---------- */
-const previewText = previewTextUtil
-const formatDateForGroup = formatDateForGroupUtil
-const renderStarsInline = renderStarsInlineUtil
-
-/* ---------- minimal XSS-safe markdown ---------- */
-function escapeHTML(s: string) {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+type EntryRow = {
+  id: string
+  content: string
+  source?: string
+  user_id?: string
+  created_at?: string
+  pinned?: boolean
 }
-function safeMarkdown(src: string) {
-  const t = escapeHTML(src || '')
-  return t
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/(^|[\s])\*(.+?)\*(?=[\s.,!?:;)]|$)/g, '$1<em>$2</em>')
-    .replace(/(?:^|\n)\s*-\s+(.*)/g, (_m, p1) => `<br/>• ${p1}`)
-    .replace(/(?:^|\n)\s*\d+\.\s+(.*)/g, (_m, p1) => `<br/>• ${p1}`)
-    .replace(/\n/g, '<br/>')
+type SummaryRow = {
+  id: string
+  user_id?: string
+  summary_text: string
+  rating?: number
+  for_date?: string
+  created_at?: string
+  range_start?: string
+  range_end?: string
 }
 
-/* ---------- Confirm & Edit modals (unchanged) ---------- */
-function ConfirmModal({ open, title, description, confirmLabel = 'Delete', cancelLabel = 'Cancel', onConfirm, onCancel }: {
-  open: boolean; title: string; description?: string; confirmLabel?: string; cancelLabel?: string; onConfirm: () => Promise<void> | void; onCancel: () => void
+/* ---------- small modals ---------- */
+function ConfirmModal({
+  open, title, description, confirmLabel = 'Delete', cancelLabel = 'Cancel', onConfirm, onCancel,
+}: {
+  open: boolean
+  title: string
+  description?: string
+  confirmLabel?: string
+  cancelLabel?: string
+  onConfirm: () => Promise<void> | void
+  onCancel: () => void
 }) {
   if (!open) return null
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40" onClick={onCancel} />
-      <div className="relative z-60 w-full max-w-md rounded-md bg-white p-6 shadow-lg">
+      <div className="relative w-full max-w-md rounded-md bg-white p-6 shadow-lg">
         <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
         {description && <p className="mt-2 text-sm text-slate-600">{description}</p>}
         <div className="mt-4 flex justify-end gap-3">
@@ -65,61 +83,37 @@ function ConfirmModal({ open, title, description, confirmLabel = 'Delete', cance
     </div>
   )
 }
-function EditModal({ open, initial, onSave, onCancel }: { open: boolean; initial: string; onSave: (text: string) => Promise<void> | void; onCancel: () => void }) {
-  const [val, setVal] = useState(initial)
-  useEffect(() => setVal(initial), [initial])
-  if (!open) return null
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/40" onClick={onCancel} />
-      <div className="relative z-60 w-full max-w-2xl rounded-md bg-white p-6 shadow-lg">
-        <h3 className="text-lg font-semibold text-slate-900">Edit reflection</h3>
-        <textarea className="w-full mt-3 p-3 border rounded-md min-h-[120px] focus:outline-none" value={val} onChange={(e) => setVal(e.target.value)} />
-        <div className="mt-4 flex justify-end gap-3">
-          <button onClick={onCancel} className="px-3 py-1 border rounded-md text-sm">Cancel</button>
-          <button onClick={async () => { await onSave(val) }} className="px-3 py-1 bg-indigo-600 text-white rounded-md text-sm">Save</button>
-        </div>
-      </div>
-    </div>
-  )
-}
 
-/* ---------- Single-mount guard for EntryInput ---------- */
-function SingleEntryInput(props: React.ComponentProps<typeof EntryInput>) {
-  const [skip, setSkip] = useState(false)
-  useEffect(() => {
-    if (window.__ms_entry_input_rendered) { setSkip(true); return }
-    window.__ms_entry_input_rendered = true
-    return () => { window.__ms_entry_input_rendered = false }
-  }, [])
-  if (skip) return null
-  return <EntryInput {...props} />
-}
-
-/* ---------- Main Page ---------- */
+/* ===================================================================== */
+/*                                PAGE                                    */
+/* ===================================================================== */
 export default function Home() {
-  // Auth + UI
+  /* auth + status */
   const [user, setUser] = useState<{ id: string; email?: string } | null>(null)
   const [email, setEmail] = useState('')
   const [status, setStatus] = useState<string | null>(null)
   const [toast, setToast] = useState<{ text: string; kind?: 'info' | 'success' | 'error' } | null>(null)
 
-  // Header fade
+  /* ui */
   const [isHeaderVisible, setIsHeaderVisible] = useState(true)
   const typingTimeout = useRef<NodeJS.Timeout | null>(null)
+  const [density, setDensity] = useState<'comfortable' | 'compact'>(() => {
+    try { return (localStorage.getItem('listDensity') as any) || 'comfortable' } catch { return 'comfortable' }
+  })
+  useEffect(() => { try { localStorage.setItem('listDensity', density) } catch {} }, [density])
 
-  // Data
+  /* data */
   const [entries, setEntries] = useState<EntryRow[]>([])
   const [summaries, setSummaries] = useState<SummaryRow[]>([])
   const [streakCount, setStreakCount] = useState<number>(0)
 
-  // Generated summary
+  /* generated summary */
   const [generatedSummary, setGeneratedSummary] = useState<string | null>(null)
   const [generatedAt, setGeneratedAt] = useState<string | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
   const [isSavingRating, setIsSavingRating] = useState(false)
 
-  // Voice
+  /* speech */
   const [isRecording, setIsRecording] = useState(false)
   const [interim, setInterim] = useState('')
   const [finalText, setFinalText] = useState('')
@@ -127,66 +121,58 @@ export default function Home() {
   const holdingRef = useRef(false)
   const lastStartTimeRef = useRef<number>(0)
 
-  // UI helpers
+  /* ux helpers */
   const [hoverRating, setHoverRating] = useState<number>(0)
   const [expandedSummaryId, setExpandedSummaryId] = useState<string | null>(() => {
     try { return localStorage.getItem('expandedSummaryId') } catch { return null }
   })
   useEffect(() => {
-    try { expandedSummaryId ? localStorage.setItem('expandedSummaryId', expandedSummaryId) : localStorage.removeItem('expandedSummaryId') } catch {}
+    try {
+      expandedSummaryId ? localStorage.setItem('expandedSummaryId', expandedSummaryId)
+                        : localStorage.removeItem('expandedSummaryId')
+    } catch {}
   }, [expandedSummaryId])
   const [recentlyAddedId, setRecentlyAddedId] = useState<string | null>(null)
 
-  // Confirm modal
+  /* confirm modal */
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [confirmTitle, setConfirmTitle] = useState('')
   const [confirmDesc, setConfirmDesc] = useState<string | undefined>(undefined)
   const confirmActionRef = useRef<() => Promise<void> | void>(() => {})
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
 
-  const summariesRef = useRef<HTMLDivElement | null>(null)
-
-  // Density
-  const [density, setDensity] = useState<'comfortable' | 'compact'>(() => {
-    try { return (localStorage.getItem('listDensity') as any) || 'comfortable' } catch { return 'comfortable' }
+  /* onboarding tip */
+  const [showOnboarding, setShowOnboarding] = useState<boolean>(() => {
+    try { return !localStorage.getItem('ms_seen_onboarding') } catch { return true }
   })
-  useEffect(() => { try { localStorage.setItem('listDensity', density) } catch {} }, [density])
-
-  // Onboarding
-  const [showOnboarding, setShowOnboarding] = useState<boolean>(() => { try { return !localStorage.getItem('ms_seen_onboarding') } catch { return true } })
   function dismissOnboarding() { try { localStorage.setItem('ms_seen_onboarding', '1') } catch {}; setShowOnboarding(false) }
 
-  // Edit modal
-  const [editOpen, setEditOpen] = useState(false)
-  const [editInitial, setEditInitial] = useState('')
-  const [editSaveHandler, setEditSaveHandler] = useState<((t: string) => Promise<void>) | null>(null)
-
-  // Toast
+  /* toasts */
   function showToast(text: string, kind: 'info' | 'success' | 'error' = 'info', ms = 2500) {
     setToast({ text, kind }); window.setTimeout(() => setToast(null), ms)
   }
 
-  /* ---------- Auth + initial load ---------- */
+  /* ---------------- auth bootstrap ---------------- */
   useEffect(() => {
     const load = async () => {
       try {
         const { data } = await supabase.auth.getUser()
         if (data?.user) setUser({ id: data.user.id, email: data.user.email ?? undefined })
-      } catch (err) { console.warn('auth getUser error', err) }
+      } catch {}
       await fetchEntries(); await fetchSummaries(); await fetchStreak()
     }
     load()
 
+    // correct cleanup for supabase-js v2
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
       if (session?.user) setUser({ id: session.user.id, email: session.user.email ?? undefined })
       else setUser(null)
       fetchEntries(); fetchSummaries()
     })
     return () => subscription.unsubscribe()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  /* ---------- Auth helpers ---------- */
+  /* ---------------- auth helpers ---------------- */
   const signInWithGoogle = async () => {
     setStatus('Redirecting to Google...')
     await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } })
@@ -203,227 +189,336 @@ export default function Home() {
     showToast('Signed out', 'info')
   }
 
-  /* ---------- Entries CRUD ---------- */
+  /* ---------------- data ops: entries ---------------- */
   const fetchEntries = async () => {
     try {
       const { data: u } = await supabase.auth.getUser()
       const uid = u?.user?.id
       if (!uid) { setEntries([]); return }
-      const { data, error } = await supabase.from('entries')
+      const { data, error } = await supabase
+        .from('entries')
         .select('id, content, source, created_at, user_id')
-        .eq('user_id', uid).order('created_at', { ascending: false }).limit(1000)
+        .eq('user_id', uid)
+        .order('created_at', { ascending: false })
+        .limit(1000)
       if (error) throw error
       setEntries((data || []).map((d: any) => ({ ...d, pinned: false })))
-    } catch (err) { console.error('fetchEntries error', err); setEntries([]) }
+    } catch { setEntries([]) }
   }
+
   const saveTextEntry = async (text: string, source = 'text') => {
     try {
       const { data: u } = await supabase.auth.getUser()
       const uid = u?.user?.id
       if (!uid) { showToast('Please sign in to save an entry.', 'info'); return }
+
       const trimmed = (text || '').normalize('NFC').trim()
       if (!trimmed) { showToast('Cannot save empty entry.', 'info'); return }
-      const { data: inserted, error } = await supabase.from('entries').insert([{ content: trimmed, source, user_id: uid }]).select('*')
+
+      const { data: inserted, error } = await supabase
+        .from('entries')
+        .insert([{ content: trimmed, source, user_id: uid }])
+        .select('*')
+
       if (error) throw error
       const newRow: any = Array.isArray(inserted) && inserted.length ? inserted[0] : null
       if (newRow) {
         setRecentlyAddedId(newRow.id)
         setEntries((prev) => [{ ...newRow, pinned: false }, ...prev])
         setTimeout(() => setRecentlyAddedId(null), 1600)
-      } else { await fetchEntries() }
-      setFinalText(''); showToast(randomAffirmation(), 'success', 1600)
-    } catch (err: any) { console.error('saveTextEntry', err); showToast('Save failed: ' + (err?.message || String(err)), 'error') }
+      } else {
+        await fetchEntries()
+      }
+
+      setFinalText('')
+      showToast(randomAffirmation(), 'success', 1600)
+    } catch (err: any) {
+      showToast('Save failed: ' + (err?.message || String(err)), 'error')
+    }
   }
-  const togglePinEntry = (id: string) => { setEntries((p) => p.map((e) => (e.id === id ? { ...e, pinned: !e.pinned } : e))); showToast('Toggled pin', 'info', 900) }
-  const openEditEntry = (e: EntryRow) => {
-    setEditInitial(e.content); setEditOpen(true)
-    setEditSaveHandler(async (text: string) => {
-      try {
-        const val = text.normalize('NFC')
-        setEntries((prev) => prev.map((x) => (x.id === e.id ? { ...x, content: val } : x)))
-        const { error } = await supabase.from('entries').update({ content: val }).eq('id', e.id)
-        if (error) throw error
-        showToast('Updated entry', 'success')
-      } catch (err) { console.error('edit entry error', err); showToast('Could not save edit', 'error'); await fetchEntries() }
-      finally { setEditOpen(false); setEditSaveHandler(null) }
-    })
+
+  const togglePinEntry = (id: string) => {
+    setEntries((p) => p.map((e) => (e.id === id ? { ...e, pinned: !e.pinned } : e)))
+    showToast('Toggled pin', 'info', 900)
   }
+
   const confirmDeleteEntry = (entryId: string) => {
-    setConfirmTitle('Delete entry'); setConfirmDesc('Permanently delete this entry? This action cannot be undone.')
+    setConfirmTitle('Delete entry')
+    setConfirmDesc('Permanently delete this entry? This action cannot be undone.')
     confirmActionRef.current = async () => {
-      setPendingDeleteId(entryId); setEntries((p) => p.filter((e) => e.id !== entryId))
-      try { const { error } = await supabase.from('entries').delete().eq('id', entryId); if (error) throw error; showToast('Entry deleted', 'info') }
-      catch (err: any) { console.error('delete entry failed', err); showToast('Could not delete entry: ' + (err?.message || String(err)), 'error'); await fetchEntries() }
-      finally { setPendingDeleteId(null) }
+      setPendingDeleteId(entryId)
+      setEntries((p) => p.filter((e) => e.id !== entryId))
+      try {
+        const { error } = await supabase.from('entries').delete().eq('id', entryId)
+        if (error) throw error
+        showToast('Entry deleted', 'info')
+      } catch {
+        await fetchEntries()
+      } finally {
+        setPendingDeleteId(null)
+      }
     }
     setConfirmOpen(true)
   }
 
-  /* ---------- Summaries ---------- */
+  /* ---------------- data ops: summaries ---------------- */
   const fetchSummaries = async () => {
     try {
       const { data: u } = await supabase.auth.getUser()
       const uid = u?.user?.id
       if (!uid) { setSummaries([]); return }
-      const { data, error } = await supabase.from('summaries')
+      const { data, error } = await supabase
+        .from('summaries')
         .select('id, summary_text, created_at, rating, for_date, user_id, range_start, range_end')
-        .eq('user_id', uid).order('created_at', { ascending: false }).limit(500)
+        .eq('user_id', uid)
+        .order('created_at', { ascending: false })
+        .limit(500)
       if (error) throw error
       setSummaries(data || [])
       if (expandedSummaryId && !(data || []).some((s) => s.id === expandedSummaryId)) setExpandedSummaryId(null)
-    } catch (err) { console.error('fetchSummaries error', err); setSummaries([]) }
-  }
-  const deleteSavedSummary = async (summaryId: string) => {
-    setPendingDeleteId(summaryId); setSummaries((p) => p.filter((x) => x.id !== summaryId))
-    try { const { error } = await supabase.from('summaries').delete().eq('id', summaryId); if (error) throw error; showToast('Reflection deleted', 'info') }
-    catch (err: any) { console.error('delete summary failed', err); showToast('Could not delete reflection: ' + (err?.message || String(err)), 'error'); await fetchSummaries() }
-    finally { setPendingDeleteId(null) }
+    } catch { setSummaries([]) }
   }
 
-  /* ---------- Streak ---------- */
+  const deleteSavedSummary = async (summaryId: string) => {
+    setPendingDeleteId(summaryId)
+    setSummaries((p) => p.filter((x) => x.id !== summaryId))
+    try {
+      const { error } = await supabase.from('summaries').delete().eq('id', summaryId)
+      if (error) throw error
+      showToast('Reflection deleted', 'info')
+    } catch (err: any) {
+      showToast('Could not delete reflection: ' + (err?.message || String(err)), 'error')
+      await fetchSummaries()
+    } finally {
+      setPendingDeleteId(null)
+    }
+  }
+
+  /* ---------------- streak ---------------- */
   const fetchStreak = async () => {
     try {
       const { data: u } = await supabase.auth.getUser()
-      const uid = u?.user?.id; if (!uid) return
+      const uid = u?.user?.id
+      if (!uid) return
       const { data, error } = await supabase.from('user_stats').select('streak_count').eq('user_id', uid).single()
       if (!error && data) setStreakCount(data.streak_count || 0)
-    } catch (err) { console.error('fetchStreak error', err) }
+    } catch {}
   }
 
-  /* ---------- Header fade ---------- */
+  /* ---------------- header fade on typing ---------------- */
   function handleTyping() {
     setIsHeaderVisible(false)
     if (typingTimeout.current) clearTimeout(typingTimeout.current)
     typingTimeout.current = setTimeout(() => setIsHeaderVisible(true), 4000)
   }
 
-  /* ---------- Idle hint ---------- */
-  const [showReflectPrompt, setShowReflectPrompt] = useState(false)
+  /* ---------------- speech recognition ---------------- */
   useEffect(() => {
-    const idleTimer = setTimeout(() => setShowReflectPrompt(true), 10000)
-    const resetIdle = () => setShowReflectPrompt(false)
-    window.addEventListener('keydown', resetIdle); window.addEventListener('mousemove', resetIdle); window.addEventListener('click', resetIdle)
-    return () => { clearTimeout(idleTimer); window.removeEventListener('keydown', resetIdle); window.removeEventListener('mousemove', resetIdle); window.removeEventListener('click', resetIdle) }
-  }, [finalText, entries])
-
-  /* ---------- Speech (throttled restart) ---------- */
-  useEffect(() => {
-    const Recog = window.SpeechRecognition || window.webkitSpeechRecognition || null
+    const Recog = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition || null
     if (!Recog) return
     const r = new Recog()
     recogRef.current = r
-    r.lang = 'en-US'; r.interimResults = true; r.maxAlternatives = 1; r.continuous = false
+    r.lang = 'en-US'
+    r.interimResults = true
+    r.maxAlternatives = 1
+    r.continuous = false
+
     r.onresult = (event: any) => {
-      let interimT = '', finalT = ''
-      for (let i = event.resultIndex; i < event.results.length; i += 1) {
+      let interimT = ''
+      let finalT = ''
+      for (let i = event.resultIndex; i < event.results.length; i++) {
         const res = event.results[i]
-        if (res.isFinal) finalT += res[0].transcript; else interimT += res[0].transcript
+        if (res.isFinal) finalT += res[0].transcript
+        else interimT += res[0].transcript
       }
       if (interimT) setInterim(interimT)
-      if (finalT) { setFinalText((s) => (s ? s + ' ' + finalT : finalT)); setInterim('') }
+      if (finalT) {
+        setFinalText((s) => (s ? s + ' ' + finalT : finalT))
+        setInterim('')
+      }
     }
-    r.onerror = (e: any) => { console.error('SpeechRecognition error', e); holdingRef.current = false; showToast('Recognition error: ' + e.error, 'error'); setIsRecording(false) }
+
+    r.onerror = (e: any) => {
+      console.error('SpeechRecognition error', e)
+      holdingRef.current = false
+      setIsRecording(false)
+      showToast('Recognition error: ' + e.error, 'error')
+    }
+
     r.onend = () => {
       if (holdingRef.current) {
         const now = Date.now()
-        if (now - lastStartTimeRef.current > 1000) { try { lastStartTimeRef.current = now; recogRef.current?.start() } catch {} }
-      } else setIsRecording(false)
+        if (now - lastStartTimeRef.current > 1000) {
+          try { lastStartTimeRef.current = now; recogRef.current?.start() } catch {}
+        }
+      } else {
+        setIsRecording(false)
+      }
     }
+
     return () => { recogRef.current = null }
   }, [])
 
   const startRecording = () => {
     if (!recogRef.current) { showToast('Speech API not available in this browser', 'info'); return }
-    try { holdingRef.current = true; lastStartTimeRef.current = Date.now(); recogRef.current.start(); setIsRecording(true); setInterim(''); setFinalText(''); setStatus('Recording...') }
-    catch (err: any) { setStatus('Mic error: ' + err?.message); showToast('Mic error: ' + err?.message, 'error'); holdingRef.current = false }
+    try {
+      holdingRef.current = true
+      lastStartTimeRef.current = Date.now()
+      recogRef.current.start()
+      setIsRecording(true)
+      setInterim('')
+      setFinalText('')
+      setStatus('Recording...')
+    } catch (err: any) {
+      setStatus('Mic error: ' + err?.message)
+      showToast('Mic error: ' + err?.message, 'error')
+      holdingRef.current = false
+    }
   }
-  const stopRecording = async () => {
+
+  const stopRecording = () => {
     holdingRef.current = false
     try { recogRef.current?.stop() } catch {}
     setIsRecording(false)
     const text = (finalText + (interim ? ' ' + interim : '')).trim()
     setInterim('')
     if (!text) { setStatus('No speech captured.'); return }
-    setFinalText(text); setStatus('Transcription ready — edit if needed, then click Save.'); showToast('Transcription ready — edit and press Save', 'info')
+    setFinalText(text)
+    setStatus('Transcription ready — edit if needed, then click Save.')
+    showToast('Transcription ready — edit and press Save', 'info')
   }
 
-  /* ---------- Generate 24h Summary ---------- */
+  /* ---------------- generate + save summary ---------------- */
   async function generate24hSummary() {
     try {
-      setIsGenerating(true); setStatus('Loading recent entries...')
+      setIsGenerating(true)
+      setStatus('Loading recent entries...')
       const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
-      const { data: entries24, error } = await supabase.from('entries').select('id, content, created_at, source').gte('created_at', since).order('created_at', { ascending: true })
+      const { data: entries24, error } = await supabase
+        .from('entries')
+        .select('id, content, created_at, source')
+        .gte('created_at', since)
+        .order('created_at', { ascending: true })
       if (error) throw error
       if (!entries24?.length) { showToast('No entries in the past 24 hours', 'info'); setIsGenerating(false); return }
+
       setStatus('Generating reflection — please wait...')
-      const resp = await fetch('/api/generate-summary', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ entries: entries24 }) })
+      const resp = await fetch('/api/generate-summary', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entries: entries24 })
+      })
       const payload = await resp.json()
-      if (!resp.ok) { console.error('generate error payload', payload); showToast('Couldn’t generate reflection right now', 'error'); setIsGenerating(false); return }
-      setGeneratedSummary(payload.summary); setGeneratedAt(new Date().toISOString()); showToast('Reflection ready', 'success')
-    } catch (err: any) { console.error('generate24hSummary', err); showToast('Generation failed', 'error') }
-    finally { setIsGenerating(false) }
+      if (!resp.ok) { console.error(payload); showToast('Couldn’t generate reflection right now', 'error'); setIsGenerating(false); return }
+      setGeneratedSummary(payload.summary)
+      setGeneratedAt(new Date().toISOString())
+      showToast('Reflection ready', 'success')
+    } catch {
+      showToast('Generation failed', 'error')
+    } finally {
+      setIsGenerating(false)
+    }
   }
 
-  /* ---------- Save rated summary ---------- */
   async function saveRatedSummary(rating: number) {
     if (!generatedSummary) return
     try {
-      setIsSavingRating(true); setStatus('Saving reflection...')
+      setIsSavingRating(true)
+      setStatus('Saving reflection...')
       const { data: u } = await supabase.auth.getUser()
       let uid = u?.user?.id
-      if (!uid) { const { data: sess } = await supabase.auth.getSession(); uid = (sess as any)?.session?.user?.id }
+      if (!uid) {
+        const { data: sess } = await supabase.auth.getSession()
+        uid = (sess as any)?.session?.user?.id
+      }
       if (!uid) { showToast('Please sign in to save the reflection', 'info'); setIsSavingRating(false); return }
+
       const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
       const upto = new Date().toISOString()
       const todayIso = new Date().toISOString().slice(0, 10)
-      const insertResp = await supabase.from('summaries').insert([{ user_id: uid, range_start: since, range_end: upto, for_date: todayIso, summary_text: generatedSummary, rating }]).select('*')
+
+      const insertResp = await supabase
+        .from('summaries')
+        .insert([{ user_id: uid, range_start: since, range_end: upto, for_date: todayIso, summary_text: generatedSummary, rating }])
+        .select('*')
       const { data: inserted, error } = insertResp as any
       if (error) throw error
+
       const newRow = Array.isArray(inserted) && inserted.length ? inserted[0] : null
-      if (newRow) { setSummaries((prev) => [newRow, ...prev]); setRecentlyAddedId(newRow.id); setExpandedSummaryId(newRow.id); setTimeout(() => { setExpandedSummaryId(null); setRecentlyAddedId(null) }, 2600) }
-      else { await fetchSummaries() }
-      setGeneratedSummary(null); setGeneratedAt(null); setHoverRating(0)
-      try { await fetch('/api/user-stats', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: uid, for_date: todayIso }) }) } catch {}
+      if (newRow) {
+        setSummaries((prev) => [newRow, ...prev])
+        setExpandedSummaryId(newRow.id)
+        setRecentlyAddedId(newRow.id)
+        setTimeout(() => { setExpandedSummaryId(null); setRecentlyAddedId(null) }, 2600)
+      } else {
+        await fetchSummaries()
+      }
+
+      setGeneratedSummary(null)
+      setGeneratedAt(null)
+      setHoverRating(0)
+
+      try {
+        await fetch('/api/user-stats', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: uid, for_date: todayIso }) })
+      } catch {}
       try { await fetchStreak() } catch {}
       setTimeout(() => { document.getElementById('your-summaries-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }, 250)
-    } catch (err: any) { console.error('saveRatedSummary error', err); showToast('Could not save reflection: ' + (err?.message || String(err)), 'error') }
-    finally { setIsSavingRating(false) }
+    } catch (err: any) {
+      showToast('Could not save reflection: ' + (err?.message || String(err)), 'error')
+    } finally {
+      setIsSavingRating(false)
+    }
   }
 
-  /* ---------- Export helpers ---------- */
+  /* ---------------- exports ---------------- */
   function exportReflectionsAsMarkdown() {
     const md = entries.map((e) => `- ${new Date(e.created_at || '').toLocaleString()}\n\n${e.content}\n`).join('\n\n')
-    const blob = new Blob([md], { type: 'text/markdown' }); const url = URL.createObjectURL(blob)
-    const a = document.createElement('a'); a.href = url; a.download = `mindstream-reflections-${new Date().toISOString().slice(0,10)}.md`; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url)
+    const blob = new Blob([md], { type: 'text/markdown' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = `mindstream-reflections-${new Date().toISOString().slice(0,10)}.md`
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url)
   }
   function exportSummariesAsMarkdown() {
     const md = summaries.map((s) => `## ${s.for_date || (new Date(s.created_at || '')).toLocaleString()}\n\n${s.summary_text}\n`).join('\n\n')
-    const blob = new Blob([md], { type: 'text/markdown' }); const url = URL.createObjectURL(blob)
-    const a = document.createElement('a'); a.href = url; a.download = `mindstream-summaries-${new Date().toISOString().slice(0,10)}.md`; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url)
+    const blob = new Blob([md], { type: 'text/markdown' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = `mindstream-summaries-${new Date().toISOString().slice(0,10)}.md`
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url)
   }
 
-  /* ---------- Group by date (robust) ---------- */
+  /* ---------------- utils: group entries by date (robust) ---------------- */
   function groupEntriesByDate(entriesList: EntryRow[]) {
-    const today = new Date()
-    const groups: { title: string; items: EntryRow[] }[] = []
     const byDate: Record<string, EntryRow[]> = {}
     entriesList.forEach((e) => {
-      const dKey = e.created_at ? e.created_at.slice(0, 10) : new Date().toISOString().slice(0, 10)
-      if (!byDate[dKey]) byDate[dKey] = []; byDate[dKey].push(e)
+      const key = e.created_at ? e.created_at.slice(0, 10) : new Date().toISOString().slice(0, 10)
+      if (!byDate[key]) byDate[key] = []
+      byDate[key].push(e)
     })
-    const sortedKeys = Object.keys(byDate).sort((a, b) => new Date(b).getTime() - new Date(a).getTime())
-    const todayKey = today.toISOString().slice(0, 10)
-    const y = new Date(today); y.setDate(today.getDate() - 1); const yKey = y.toISOString().slice(0, 10)
-    const todayItems = byDate[todayKey] || []; const yItems = byDate[yKey] || []; const others = sortedKeys.filter((k) => k !== todayKey && k !== yKey)
-    if (todayItems.length) groups.push({ title: 'Today', items: todayItems })
-    if (yItems.length) groups.push({ title: 'Yesterday', items: yItems })
-    others.forEach((k) => groups.push({ title: new Date(k).toLocaleDateString(), items: byDate[k] }))
+    const sorted = Object.keys(byDate).sort((a, b) => new Date(b).getTime() - new Date(a).getTime())
+    // Show Today/Yesterday labels if they exist
+    const todayKey = new Date().toISOString().slice(0, 10)
+    const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1)
+    const yesterdayKey = yesterday.toISOString().slice(0, 10)
+
+    const groups: { title: string; items: EntryRow[] }[] = []
+    if (byDate[todayKey]) groups.push({ title: 'Today', items: byDate[todayKey] })
+    if (byDate[yesterdayKey]) groups.push({ title: 'Yesterday', items: byDate[yesterdayKey] })
+    sorted.filter((k) => k !== todayKey && k !== yesterdayKey)
+          .forEach((k) => groups.push({ title: new Date(k).toLocaleDateString(), items: byDate[k] }))
     return groups
   }
 
-  /* ---------- Left & Right columns ---------- */
+  /* ---------------- typing fade ---------------- */
+  function handleTyping() {
+    setIsHeaderVisible(false)
+    if (typingTimeout.current) clearTimeout(typingTimeout.current)
+    typingTimeout.current = setTimeout(() => setIsHeaderVisible(true), 4000)
+  }
 
-  // LEFT: (No EntryInput here — removed)
+  /* ============================= RENDER ============================= */
+
+  // LEFT COLUMN — NOTE: NO EntryInput here (Option A)
   const LeftColumn = (
     <>
       {generatedSummary && (
@@ -434,7 +529,7 @@ export default function Home() {
           hoverRating={hoverRating}
           setHoverRating={setHoverRating}
           saveRatedSummary={saveRatedSummary}
-          discardSummary={() => { setGeneratedSummary(null); setGeneratedAt(null); setStatus('Reflection discarded.'); showToast('Reflection discarded', 'info') }}
+          discardSummary={() => { setGeneratedSummary(null); setGeneratedAt(null); showToast('Reflection discarded', 'info') }}
         />
       )}
 
@@ -455,13 +550,10 @@ export default function Home() {
                             <div className={`text-slate-800 whitespace-pre-wrap ${density === 'compact' ? 'line-clamp-2' : ''}`}>{e.content}</div>
                             <div className="mt-2 text-xs text-slate-400">{new Date(e.created_at || Date.now()).toLocaleString()}</div>
                           </div>
-                          <div className="flex flex-col items-end gap-2">
-                            <div className="card-actions flex items-center gap-2">
-                              <button onClick={() => openEditEntry(e)} title="Edit" className="p-2 rounded-md hover:bg-slate-50">✎</button>
-                              <button onClick={() => togglePinEntry(e.id)} title="Pin" className={`p-2 rounded-md hover:bg-slate-50 ${e.pinned ? 'opacity-100' : 'opacity-80'}`}>📌</button>
-                              <button onClick={() => { navigator.clipboard?.writeText(e.content); showToast('Copied', 'success') }} title="Copy" className="p-2 rounded-md hover:bg-slate-50">⎘</button>
-                              <button onClick={() => confirmDeleteEntry(e.id)} title="Delete" className="p-2 rounded-md hover:bg-rose-50">🗑️</button>
-                            </div>
+                          <div className="flex items-center gap-2">
+                            <button onClick={() => togglePinEntry(e.id)} title="Pin" className="p-2 rounded-md hover:bg-slate-50">📌</button>
+                            <button onClick={() => { navigator.clipboard?.writeText(e.content); showToast('Copied', 'success') }} title="Copy" className="p-2 rounded-md hover:bg-slate-50">⎘</button>
+                            <button onClick={() => confirmDeleteEntry(e.id)} title="Delete" className="p-2 rounded-md hover:bg-rose-50">🗑️</button>
                           </div>
                         </div>
                       </li>
@@ -476,108 +568,101 @@ export default function Home() {
     </>
   )
 
-  // RIGHT
+  // RIGHT COLUMN — saved summaries
   const RightColumn = (
     <div>
       <div className="rounded-lg bg-white p-4 border shadow-sm space-y-6 mt-3">
         {summaries.length === 0 && <div className="text-slate-700">No summaries yet — generate one above.</div>}
-        {Object.entries(summaries.reduce((acc: Record<string, SummaryRow[]>, s) => {
-          const key = s.for_date || (s.created_at ? new Date(s.created_at).toLocaleDateString() : 'Other')
-          if (!acc[key]) acc[key] = []; acc[key].push(s); return acc
-        }, {})).map(([dateKey, list]) => (
-          <div key={dateKey}>
-            <div className="text-xs text-slate-400 mb-2">{dateKey}</div>
-            <ul className="space-y-3">
-              {list.map((s) => {
-                const isExpanded = expandedSummaryId === s.id
-                const preview = previewText(s.summary_text || '', 220)
-                const highlight = recentlyAddedId === s.id
-                return (
-                  <li key={s.id} className={`rounded-md border bg-white overflow-hidden transition-shadow ${highlight ? 'ring-2 ring-teal-200' : ''}`}>
-                    <div className="p-4 flex items-start gap-4">
-                      <div className="flex-1">
-                        <div className="summary-preview">
-                          <div className={`text-sm text-slate-800 leading-snug ${density === 'compact' ? 'line-clamp-2' : 'line-clamp-4'}`}>{preview}</div>
-                        </div>
-                        <div className="mt-2 text-xs text-slate-400 flex items-center gap-3">
-                          <span>{s.for_date ?? (s.created_at ? new Date(s.created_at).toLocaleDateString() : '')}</span>
-                          <span className="text-yellow-500" dangerouslySetInnerHTML={{ __html: renderStarsInline(s.rating) }} />
-                          <span className="text-slate-400">·</span>
-                          <span className="text-slate-500 text-xs">{s.summary_text?.length ?? 0} chars</span>
-                        </div>
-                      </div>
-                      <div className="flex flex-col items-end gap-2">
-                        <div className="flex items-center gap-2">
-                          <button aria-expanded={isExpanded} aria-controls={`summary-body-${s.id}`} onClick={() => setExpandedSummaryId((cur) => cur === s.id ? null : s.id)} className="p-3 min-w-[44px] min-h-[44px] rounded-md border bg-white hover:bg-indigo-50" title={isExpanded ? 'Collapse summary' : 'Expand summary'}>
-                            <svg className={`w-5 h-5 transform transition-transform ${isExpanded ? 'rotate-180' : 'rotate-0'}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-                          </button>
-                          <div className="card-actions flex items-center gap-2">
-                            <button onClick={() => { navigator.clipboard?.writeText(s.summary_text || ''); showToast('Copied summary', 'success') }} title="Copy" className="p-2 rounded-md hover:bg-slate-50">⎘</button>
-                            <button onClick={() => { setConfirmTitle('Delete reflection'); setConfirmDesc('Permanently delete this reflection?'); confirmActionRef.current = async () => { await deleteSavedSummary(s.id) }; setConfirmOpen(true) }} className="p-2 rounded-md hover:bg-rose-50" title="Delete">🗑️</button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
+        {summaries.map((s) => {
+          const isExpanded = expandedSummaryId === s.id
+          const preview = previewText(s.summary_text || '', 220)
+          const highlight = recentlyAddedId === s.id
+          return (
+            <div key={s.id} className={`rounded-md border bg-white overflow-hidden transition-shadow ${highlight ? 'ring-2 ring-teal-200' : ''}`}>
+              <div className="p-4 flex items-start gap-4">
+                <div className="flex-1">
+                  <div className="text-sm text-slate-800 leading-snug line-clamp-4">{preview}</div>
+                  <div className="mt-2 text-xs text-slate-400 flex items-center gap-3">
+                    <span>{s.for_date ?? (s.created_at ? new Date(s.created_at).toLocaleDateString() : '')}</span>
+                    <span className="text-yellow-500" dangerouslySetInnerHTML={{ __html: renderStarsInline(s.rating) }} />
+                    <span className="text-slate-400">·</span>
+                    <span className="text-slate-500 text-xs">{s.summary_text?.length ?? 0} chars</span>
+                  </div>
+                </div>
 
-                    {/* Expanded body — XSS-safe */}
-                    <div id={`summary-body-${s.id}`} className="px-4 pb-4 transition-[max-height,opacity] duration-300 ease-in-out overflow-hidden" style={{ maxHeight: isExpanded ? '1200px' : '0px', opacity: isExpanded ? 1 : 0 }} role="region" aria-hidden={!isExpanded}>
-                      <div className="mt-2 text-slate-800 leading-relaxed whitespace-pre-wrap">
-                        <div dangerouslySetInnerHTML={{ __html: safeMarkdown(s.summary_text || '') }} />
-                      </div>
-                      <div className="mt-3 flex items-center justify-between">
-                        <div className="text-xs text-slate-400">Saved {s.for_date ?? (s.created_at ? new Date(s.created_at).toLocaleString() : '')}</div>
-                        <div className="text-sm text-slate-600">Your rating: <span className="text-yellow-500" dangerouslySetInnerHTML={{ __html: renderStarsInline(s.rating) }} /></div>
-                      </div>
-                    </div>
-                  </li>
-                )
-              })}
-            </ul>
-          </div>
-        ))}
+                <div className="flex items-center gap-2">
+                  <button
+                    aria-expanded={isExpanded}
+                    aria-controls={`summary-body-${s.id}`}
+                    onClick={() => setExpandedSummaryId((cur) => (cur === s.id ? null : s.id))}
+                    className="p-3 min-w-[44px] min-h-[44px] rounded-md border bg-white hover:bg-indigo-50"
+                    title={isExpanded ? 'Collapse summary' : 'Expand summary'}
+                  >
+                    <svg className={`w-5 h-5 transform transition-transform ${isExpanded ? 'rotate-180' : 'rotate-0'}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                  </button>
+                  <button onClick={() => { navigator.clipboard?.writeText(s.summary_text || ''); showToast('Copied summary', 'success') }} title="Copy" className="p-2 rounded-md hover:bg-slate-50">⎘</button>
+                  <button onClick={() => { setConfirmTitle('Delete reflection'); setConfirmDesc('Permanently delete this reflection?'); confirmActionRef.current = async () => { await deleteSavedSummary(s.id) }; setConfirmOpen(true) }} className="p-2 rounded-md hover:bg-rose-50" title="Delete">🗑️</button>
+                </div>
+              </div>
+
+              {/* Expanded body — XSS-safe */}
+              <div
+                id={`summary-body-${s.id}`}
+                className="px-4 pb-4 transition-[max-height,opacity] duration-300 ease-in-out overflow-hidden"
+                style={{ maxHeight: isExpanded ? '1200px' : '0px', opacity: isExpanded ? 1 : 0 }}
+                role="region"
+                aria-hidden={!isExpanded}
+              >
+                <div className="mt-2 text-slate-800 leading-relaxed whitespace-pre-wrap">
+                  <div dangerouslySetInnerHTML={{ __html: safeMarkdown(s.summary_text || '') }} />
+                </div>
+              </div>
+            </div>
+          )
+        })}
       </div>
     </div>
   )
 
-  /* ---------- Confirm & layout ---------- */
-  const ConfirmModalNode = (
-    <ConfirmModal
-      open={confirmOpen}
-      title={confirmTitle}
-      description={confirmDesc}
-      confirmLabel="Delete"
-      cancelLabel="Cancel"
-      onConfirm={async () => { setConfirmOpen(false); try { await confirmActionRef.current() } catch (err) { console.error('confirm action error', err) } finally { confirmActionRef.current = () => {} } }}
-      onCancel={() => { setConfirmOpen(false); confirmActionRef.current = () => {} }}
-    />
-  )
-  const EditModalNode = editOpen && editSaveHandler ? <EditModal open={editOpen} initial={editInitial} onSave={async (text) => await editSaveHandler(text)} onCancel={() => { setEditOpen(false); setEditSaveHandler(null) }} /> : null
-
+  /* ---------------- layout ---------------- */
   return (
     <>
       <Head><title>Mindstream — Calm private journaling</title></Head>
+
       <div className="min-h-screen bg-gradient-to-b from-indigo-50 to-white p-8">
         <ToastContainer toast={toast} />
         <DebugOverlayHelper />
-        {ConfirmModalNode}
-        {EditModalNode}
 
         <main className="mx-auto w-full max-w-3xl">
+          {/* header */}
           <div className={`overflow-hidden transition-all duration-700 ease-in-out ${isHeaderVisible ? 'opacity-100 translate-y-0 max-h-[520px]' : 'opacity-0 -translate-y-3 pointer-events-none max-h-0'}`}>
-            <Header user={user} email={email} setEmail={setEmail} signOut={signOut} sendMagicLink={sendMagicLink} signInWithGoogle={signInWithGoogle} streakCount={streakCount} />
+            <Header
+              user={user}
+              email={email}
+              setEmail={setEmail}
+              signOut={signOut}
+              sendMagicLink={sendMagicLink}
+              signInWithGoogle={signInWithGoogle}
+              streakCount={streakCount}
+            />
           </div>
 
-          {/* Top: 3:1 grid */}
+          {/* top 3:1 grid — the ONLY EntryInput */}
           <div className="ms-top-grid mt-6">
             <div className="flex items-stretch">
-              <button onClick={generate24hSummary} disabled={isGenerating} className={`ms-full-height-btn bg-indigo-600 text-white text-base font-medium transition-all duration-300 rounded-lg ${isGenerating ? 'opacity-70 cursor-wait' : 'hover:bg-indigo-700'} ${!isGenerating ? 'animate-shimmer' : ''}`} title="Reflect on your day">
+              <button
+                onClick={generate24hSummary}
+                disabled={isGenerating}
+                className={`ms-full-height-btn bg-indigo-600 text-white text-base font-medium transition-all duration-300 rounded-lg ${isGenerating ? 'opacity-70 cursor-wait' : 'hover:bg-indigo-700'} ${!isGenerating ? 'animate-shimmer' : ''}`}
+                title="Reflect on your day"
+              >
                 {isGenerating ? 'Reflecting...' : 'Reflect on your day'}
               </button>
             </div>
             <div className="flex items-stretch">
-              <SingleEntryInput
+              <EntryInput
                 finalText={finalText}
-                setFinalText={(text) => { setFinalText(text); handleTyping() }}
+                setFinalText={(t) => { setFinalText(t); handleTyping() }}
                 interim={interim}
                 isRecording={isRecording}
                 startRecording={startRecording}
@@ -586,39 +671,54 @@ export default function Home() {
                 status={status}
                 setStatus={setStatus}
                 showToast={showToast}
-                stretch={true}
+                stretch
               />
             </div>
           </div>
 
-          {/* Two-column headers */}
+          {/* two-column headers */}
           <div className="ms-two-col mt-8 items-start">
             <div className="ms-column-header flex items-center justify-between">
-              <div className="flex items-center gap-3"><span className="text-lg font-semibold text-slate-700">My Reflections</span><span className="text-xs text-slate-400">{entries.length} items</span></div>
+              <div className="flex items-center gap-3">
+                <span className="text-lg font-semibold text-slate-700">My Reflections</span>
+                <span className="text-xs text-slate-400">{entries.length} items</span>
+              </div>
               <div className="flex items-center gap-3">
                 <button onClick={exportReflectionsAsMarkdown} className="px-2 py-1 text-xs border rounded-md">Export</button>
                 <div className="text-xs text-slate-500">View:</div>
                 <select value={density} onChange={(e) => setDensity(e.target.value as any)} className="text-sm border rounded-md px-2 py-1">
-                  <option value="comfortable">Comfortable</option><option value="compact">Compact</option>
+                  <option value="comfortable">Comfortable</option>
+                  <option value="compact">Compact</option>
                 </select>
               </div>
             </div>
 
             <div className="ms-column-header flex items-center justify-between">
-              <div className="flex items-center gap-3"><span className="text-lg font-semibold text-slate-700">My Summaries</span><span className="text-xs text-slate-400">{summaries.length} items</span></div>
-              <div className="flex items-center gap-3"><button onClick={exportSummariesAsMarkdown} className="px-2 py-1 text-xs border rounded-md">Export</button></div>
+              <div className="flex items-center gap-3">
+                <span className="text-lg font-semibold text-slate-700">My Summaries</span>
+                <span className="text-xs text-slate-400">{summaries.length} items</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <button onClick={exportSummariesAsMarkdown} className="px-2 py-1 text-xs border rounded-md">Export</button>
+              </div>
             </div>
 
-            {/* Columns */}
+            {/* columns */}
             <div>{LeftColumn}</div>
-            <div id="your-summaries-section" ref={summariesRef as any}>{RightColumn}</div>
+            <div id="your-summaries-section">{RightColumn}</div>
           </div>
 
+          {/* onboarding tip */}
           {showOnboarding && (
             <div className="mt-3 p-3 bg-indigo-600 text-white rounded-md shadow-md max-w-sm">
               <div className="flex justify-between items-start gap-2">
-                <div><div className="font-semibold">Welcome to Mindstream</div><div className="text-sm mt-1">Type freely or hold the mic to record. Your voice stays in the browser.</div></div>
-                <div className="pl-3"><button onClick={dismissOnboarding} className="text-xs underline">Got it</button></div>
+                <div>
+                  <div className="font-semibold">Welcome to Mindstream</div>
+                  <div className="text-sm mt-1">Type freely or hold the mic to record. Your voice stays in the browser.</div>
+                </div>
+                <div className="pl-3">
+                  <button onClick={dismissOnboarding} className="text-xs underline">Got it</button>
+                </div>
               </div>
             </div>
           )}
@@ -629,6 +729,16 @@ export default function Home() {
           <footer className="mt-8 text-xs text-slate-400">Private • Encrypted • Yours</footer>
         </main>
       </div>
+
+      <ConfirmModal
+        open={confirmOpen}
+        title={confirmTitle}
+        description={confirmDesc}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        onConfirm={async () => { setConfirmOpen(false); try { await (confirmActionRef.current?.()) } finally { confirmActionRef.current = () => {} } }}
+        onCancel={() => { setConfirmOpen(false); confirmActionRef.current = () => {} }}
+      />
     </>
   )
 }
