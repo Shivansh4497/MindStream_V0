@@ -10,7 +10,7 @@ import DebugOverlayHelper from '../components/DebugOverlayHelper'
 
 import {
   previewText as previewTextUtil,
-  markDownLike as markDownLikeUtil,
+  // markDownLike removed in favor of local safeMarkdown
   formatDateForGroup as formatDateForGroupUtil,
   renderStarsInline as renderStarsInlineUtil,
   randomAffirmation
@@ -46,9 +46,32 @@ type SummaryRow = {
 
 /* ---------------- utils alias */
 const previewText = previewTextUtil
-const markDownLike = markDownLikeUtil
 const formatDateForGroup = formatDateForGroupUtil
 const renderStarsInline = renderStarsInlineUtil
+
+/* ---------------- minimal, XSS-safe markdown renderer */
+function escapeHTML(s: string) {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+function safeMarkdown(src: string) {
+  // escape first, then allow a tiny subset of markdown
+  const t = escapeHTML(src || '')
+  return t
+    // **bold**
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    // *italic*
+    .replace(/(^|[\s])\*(.+?)\*(?=[\s.,!?:;)]|$)/g, '$1<em>$2</em>')
+    // - bullets / numbered items (keep newlines)
+    .replace(/(?:^|\n)\s*-\s+(.*)/g, (_m, p1) => `<br/>• ${p1}`)
+    .replace(/(?:^|\n)\s*\d+\.\s+(.*)/g, (_m, p1) => `<br/>• ${p1}`)
+    // line breaks
+    .replace(/\n/g, '<br/>')
+}
 
 /* ---------------- inline toast component (kept) */
 function Toast({ text, kind = 'info' }: { text: string; kind?: 'info' | 'success' | 'error' }) {
@@ -166,6 +189,7 @@ export default function Home() {
   const [finalText, setFinalText] = useState('')
   const recogRef = useRef<any>(null)
   const holdingRef = useRef(false)
+  const lastStartTimeRef = useRef<number>(0) // throttle restarts
 
   /* UI helpers */
   const [hoverRating, setHoverRating] = useState<number>(0)
@@ -233,7 +257,6 @@ export default function Home() {
   /* ---------------- Auth + initial load ---------------- */
   useEffect(() => {
     const load = async () => {
-      // get user (if logged in)
       try {
         const { data } = await supabase.auth.getUser()
         if (data?.user) setUser({ id: data.user.id, email: data.user.email ?? undefined })
@@ -245,14 +268,16 @@ export default function Home() {
       await fetchStreak()
     }
     load()
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
+
+    // FIX: correct subscription cleanup for supabase-js v2
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
       if (session?.user) setUser({ id: session.user.id, email: session.user.email ?? undefined })
       else setUser(null)
       // refresh lists on auth change
       fetchEntries()
       fetchSummaries()
     })
-    return () => sub.subscription.unsubscribe()
+    return () => subscription.unsubscribe()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -301,7 +326,6 @@ export default function Home() {
 
   const saveTextEntry = async (text: string, source = 'text') => {
     try {
-      // confirm user identity
       const { data: u } = await supabase.auth.getUser()
       const uid = u?.user?.id
       if (!uid) {
@@ -309,13 +333,12 @@ export default function Home() {
         return
       }
 
-      const trimmed = (text || '').trim()
+      const trimmed = (text || '').normalize('NFC').trim()
       if (!trimmed) {
         showToast('Cannot save empty entry.', 'info')
         return
       }
 
-      // insert into entries table (client-side)
       const { data: inserted, error } = await supabase
         .from('entries')
         .insert([{ content: trimmed, source, user_id: uid }])
@@ -323,25 +346,20 @@ export default function Home() {
 
       if (error) throw error
 
-      // the insert result may be array (standard supabase response)
       const newRow: any = Array.isArray(inserted) && inserted.length ? inserted[0] : null
       if (newRow) {
         setRecentlyAddedId(newRow.id)
-        // optimistic animation: prepend the new row (keeps same UX as before)
         const temp = { ...newRow, pinned: false }
         setEntries((prev) => [temp, ...prev])
         setTimeout(() => setRecentlyAddedId(null), 1600)
       } else {
-        // fallback reload if DB returned unexpected shape
-        await fetchEntries()
+        await fetchEntries() // ensure we actually update UI
       }
 
-      // clear input & show affirmation
       setFinalText('')
       showToast(randomAffirmation(), 'success', 1600)
     } catch (err: any) {
       console.error('saveTextEntry', err)
-      // show supabase error message if present
       const msg = (err && (err as any).message) ? (err as any).message : String(err)
       showToast('Save failed: ' + msg, 'error')
     }
@@ -359,9 +377,9 @@ export default function Home() {
     setEditOpen(true)
     setEditSaveHandler(async (text: string) => {
       try {
-        // optimistic UI
-        setEntries((prev) => prev.map((x) => (x.id === e.id ? { ...x, content: text } : x)))
-        const { error } = await supabase.from('entries').update({ content: text }).eq('id', e.id)
+        const val = text.normalize('NFC')
+        setEntries((prev) => prev.map((x) => (x.id === e.id ? { ...x, content: val } : x)))
+        const { error } = await supabase.from('entries').update({ content: val }).eq('id', e.id)
         if (error) throw error
         showToast('Updated entry', 'success')
       } catch (err: any) {
@@ -414,6 +432,10 @@ export default function Home() {
         .limit(500)
       if (error) throw error
       setSummaries(data || [])
+      // validate persisted expanded id
+      if (expandedSummaryId && !(data || []).some((s) => s.id === expandedSummaryId)) {
+        setExpandedSummaryId(null)
+      }
     } catch (err) {
       console.error('fetchSummaries error', err)
       setSummaries([])
@@ -479,7 +501,7 @@ export default function Home() {
     }
   }, [finalText, entries])
 
-  /* ---------------- Voice recognition (hold to record) ---------------- */
+  /* ---------------- Voice recognition (hold to record) — throttled restart ---------------- */
   useEffect(() => {
     const Recog = window.SpeechRecognition || window.webkitSpeechRecognition || null
     if (!Recog) return
@@ -507,16 +529,24 @@ export default function Home() {
 
     r.onerror = (e: any) => {
       console.error('SpeechRecognition error', e)
+      // stop holding to avoid infinite restart on no-speech / not-allowed
+      holdingRef.current = false
       showToast('Recognition error: ' + e.error, 'error')
       setIsRecording(false)
     }
 
     r.onend = () => {
       if (holdingRef.current) {
-        setTimeout(() => {
-          try { recogRef.current?.start() } catch {}
-        }, 150)
-      } else setIsRecording(false)
+        const now = Date.now()
+        if (now - lastStartTimeRef.current > 1000) {
+          try {
+            lastStartTimeRef.current = now
+            recogRef.current?.start()
+          } catch {}
+        }
+      } else {
+        setIsRecording(false)
+      }
     }
 
     return () => { recogRef.current = null }
@@ -529,6 +559,7 @@ export default function Home() {
     }
     try {
       holdingRef.current = true
+      lastStartTimeRef.current = Date.now()
       recogRef.current.start()
       setIsRecording(true)
       setInterim('')
@@ -537,6 +568,7 @@ export default function Home() {
     } catch (err: any) {
       setStatus('Mic error: ' + err?.message)
       showToast('Mic error: ' + err?.message, 'error')
+      holdingRef.current = false
     }
   }
 
@@ -646,7 +678,6 @@ export default function Home() {
       setGeneratedAt(null)
       setHoverRating(0)
 
-      // update streak (best-effort)
       try {
         await fetch('/api/user-stats', {
           method: 'POST',
@@ -693,7 +724,7 @@ export default function Home() {
     URL.revokeObjectURL(url)
   }
 
-  /* ---------------- Utility: groupEntriesByDate (same) ---------------- */
+  /* ---------------- Utility: groupEntriesByDate (robust sort) ---------------- */
   function groupEntriesByDate(entriesList: EntryRow[]) {
     const today = new Date()
     const groups: { title: string; items: EntryRow[] }[] = []
@@ -705,7 +736,7 @@ export default function Home() {
       byDate[dKey].push(e)
     })
 
-    const sortedKeys = Object.keys(byDate).sort((a, b) => (a > b ? -1 : 1))
+    const sortedKeys = Object.keys(byDate).sort((a, b) => new Date(b).getTime() - new Date(a).getTime())
     const todayKey = today.toISOString().slice(0, 10)
     const yesterday = new Date(today)
     yesterday.setDate(today.getDate() - 1)
@@ -741,7 +772,6 @@ export default function Home() {
           showToast={showToast}
           stretch={true}
         />
-        {/* Onboarding tooltip anchored to input capsule */}
         {showOnboarding && (
           <div className="mt-3 p-3 bg-indigo-600 text-white rounded-md shadow-md max-w-sm">
             <div className="flex justify-between items-start gap-2">
@@ -757,7 +787,6 @@ export default function Home() {
         )}
       </div>
 
-      {/* Generated summary preview */}
       {generatedSummary && (
         <SummaryCard
           summary={generatedSummary}
@@ -775,7 +804,6 @@ export default function Home() {
         />
       )}
 
-      {/* Entries list */}
       <section className={`mb-12 ${density === 'compact' ? 'text-sm' : ''}`}>
         <div className="rounded-lg bg-white p-4 border shadow-sm">
           {entries.length === 0 ? (
@@ -798,7 +826,6 @@ export default function Home() {
                             </div>
                           </div>
 
-                          {/* quick actions */}
                           <div className="flex flex-col items-end gap-2">
                             <div className="card-actions flex items-center gap-2">
                               <button onClick={() => openEditEntry(e)} title="Edit" className="p-2 rounded-md hover:bg-slate-50">✎</button>
@@ -861,7 +888,6 @@ export default function Home() {
                             <svg className={`w-5 h-5 transform transition-transform ${isExpanded ? 'rotate-180' : 'rotate-0'}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                           </button>
 
-                          {/* quick actions for summary */}
                           <div className="card-actions flex items-center gap-2">
                             <button onClick={() => { navigator.clipboard?.writeText(s.summary_text || ''); showToast('Copied summary', 'success') }} title="Copy" className="p-2 rounded-md hover:bg-slate-50">⎘</button>
                             <button onClick={() => { setConfirmTitle('Delete reflection'); setConfirmDesc('Permanently delete this reflection?'); confirmActionRef.current = async () => { await deleteSavedSummary(s.id) }; setConfirmOpen(true) }} className="p-2 rounded-md hover:bg-rose-50" title="Delete">🗑️</button>
@@ -870,10 +896,10 @@ export default function Home() {
                       </div>
                     </div>
 
-                    {/* Expanded body */}
+                    {/* Expanded body — XSS-safe */}
                     <div id={`summary-body-${s.id}`} className="px-4 pb-4 transition-[max-height,opacity] duration-300 ease-in-out overflow-hidden" style={{ maxHeight: isExpanded ? '1200px' : '0px', opacity: isExpanded ? 1 : 0 }} role="region" aria-hidden={!isExpanded}>
                       <div className="mt-2 text-slate-800 leading-relaxed whitespace-pre-wrap">
-                        <div dangerouslySetInnerHTML={{ __html: markDownLike(s.summary_text) }} />
+                        <div dangerouslySetInnerHTML={{ __html: safeMarkdown(s.summary_text || '') }} />
                       </div>
 
                       <div className="mt-3 flex items-center justify-between">
@@ -902,8 +928,9 @@ export default function Home() {
       onConfirm={async () => {
         setConfirmOpen(false)
         try { await confirmActionRef.current() } catch (err) { console.error('confirm action error', err) }
+        finally { confirmActionRef.current = () => {} } // cleanup
       }}
-      onCancel={() => setConfirmOpen(false)}
+      onCancel={() => { setConfirmOpen(false); confirmActionRef.current = () => {} }}
     />
   )
 
@@ -928,7 +955,6 @@ export default function Home() {
             <Header user={user} email={email} setEmail={setEmail} signOut={signOut} sendMagicLink={sendMagicLink} signInWithGoogle={signInWithGoogle} streakCount={streakCount} />
           </div>
 
-          {/* Top: 3:1 grid (button left, capsule right) */}
           <div className="ms-top-grid mt-6">
             <div className="flex items-stretch">
               <button onClick={generate24hSummary} disabled={isGenerating} className={`ms-full-height-btn bg-indigo-600 text-white text-base font-medium transition-all duration-300 rounded-lg ${isGenerating ? 'opacity-70 cursor-wait' : 'hover:bg-indigo-700'} ${!isGenerating ? 'animate-shimmer' : ''}`} title="Reflect on your day" >
@@ -941,9 +967,7 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Single header row for both columns with density toggle + export */}
           <div className="ms-two-col mt-8 items-start">
-            {/* header left */}
             <div className="ms-column-header flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <span className="text-lg font-semibold text-slate-700">My Reflections</span>
@@ -960,7 +984,6 @@ export default function Home() {
               </div>
             </div>
 
-            {/* header right */}
             <div className="ms-column-header flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <span className="text-lg font-semibold text-slate-700">My Summaries</span>
@@ -972,10 +995,8 @@ export default function Home() {
               </div>
             </div>
 
-            {/* left column */}
             <div>{LeftColumn}</div>
 
-            {/* right column */}
             <div id="your-summaries-section" ref={summariesRef as any}>{RightColumn}</div>
           </div>
 
