@@ -1,4 +1,6 @@
 // pages/index.tsx
+export const dynamic = 'force-dynamic';
+
 import React, { useEffect, useRef, useState } from 'react'
 import Head from 'next/head'
 import { supabase } from '../lib/supabaseClient'
@@ -151,7 +153,7 @@ export default function Home() {
   /* ---------------- auth helpers ---------------- */
   const signInWithGoogle = async () => {
     setStatus('Redirecting to Google...')
-    await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } })
+    await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: typeof window !== 'undefined' ? window.location.origin : undefined } })
   }
   const sendMagicLink = async () => {
     if (!email.includes('@')) return setStatus('Enter a valid email.')
@@ -281,7 +283,7 @@ export default function Home() {
     } catch {}
   }
 
-  /* ---------------- header fade on typing (SINGLE DECLARATION) ---------------- */
+  /* ---------------- header fade on typing ---------------- */
   function handleTyping() {
     setIsHeaderVisible(false)
     if (typingTimeout.current) clearTimeout(typingTimeout.current)
@@ -290,8 +292,10 @@ export default function Home() {
 
   /* ---------------- speech recognition ---------------- */
   useEffect(() => {
+    if (typeof window === 'undefined') return
     const Recog = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition || null
     if (!Recog) return
+
     const r = new Recog()
     recogRef.current = r
     r.lang = 'en-US'
@@ -424,6 +428,10 @@ export default function Home() {
         setSummaries((prev) => [newRow, ...prev])
         setExpandedSummaryId(newRow.id)
         setRecentlyAddedId(newRow.id)
+        // Client-only scroll
+        if (typeof window !== 'undefined') {
+          document.getElementById('your-summaries-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }
         setTimeout(() => { setExpandedSummaryId(null); setRecentlyAddedId(null) }, 2600)
       } else {
         await fetchSummaries()
@@ -437,7 +445,6 @@ export default function Home() {
         await fetch('/api/user-stats', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: uid, for_date: todayIso }) })
       } catch {}
       try { await fetchStreak() } catch {}
-      setTimeout(() => { document.getElementById('your-summaries-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }, 250)
     } catch (err: any) {
       showToast('Could not save reflection: ' + (err?.message || String(err)), 'error')
     } finally {
@@ -485,7 +492,7 @@ export default function Home() {
     return groups
   }
 
-  /* ---------------- left & right columns ---------------- */
+  /* ---------------- layout: left & right ---------------- */
 
   // LEFT COLUMN — NO EntryInput here (Option A)
   const LeftColumn = (
@@ -573,6 +580,7 @@ export default function Home() {
                 </div>
               </div>
 
+              {/* expanded body (XSS-safe) */}
               <div
                 id={`summary-body-${s.id}`}
                 className="px-4 pb-4 transition-[max-height,opacity] duration-300 ease-in-out overflow-hidden"
@@ -600,7 +608,7 @@ export default function Home() {
         <ToastContainer toast={toast} />
         <DebugOverlayHelper />
 
-        <main className="mx-auto w/full max-w-3xl">
+        <main className="mx-auto w-full max-w-3xl">
           {/* header */}
           <div className={`overflow-hidden transition-all duration-700 ease-in-out ${isHeaderVisible ? 'opacity-100 translate-y-0 max-h-[520px]' : 'opacity-0 -translate-y-3 pointer-events-none max-h-0'}`}>
             <Header
