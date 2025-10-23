@@ -33,22 +33,26 @@ export default function EntryInput({
   showToast,
   stretch = false,
 }: Props) {
-  // ---------- SINGLETON GUARD ----------
+  // ---------- HARD SINGLETON GUARD ----------
   const skipRef = useRef(false)
   useEffect(() => {
     if (typeof window === 'undefined') return
     if (window.__ms_entry_input_rendered__) {
       skipRef.current = true
+      console.warn('[EntryInput] Suppressed duplicate mount')
       return
     }
     window.__ms_entry_input_rendered__ = true
+    console.info('[EntryInput] Primary mount')
     return () => {
-      // release lock on unmount
-      if (typeof window !== 'undefined') window.__ms_entry_input_rendered__ = false
+      if (typeof window !== 'undefined') {
+        window.__ms_entry_input_rendered__ = false
+        console.info('[EntryInput] Unmounted, lock released')
+      }
     }
   }, [])
   if (skipRef.current) return null
-  // -------------------------------------
+  // ------------------------------------------
 
   function onSave() {
     const text = (finalText || '').trim()
@@ -57,7 +61,10 @@ export default function EntryInput({
   }
 
   return (
-    <div className={`rounded-xl bg-white border shadow-sm ${stretch ? 'w-full' : ''}`}>
+    <div
+      className={`rounded-xl bg-white border shadow-sm ${stretch ? 'w-full' : ''}`}
+      data-ms="entry-input"                  // <<— debug hook
+    >
       <div className="p-4">
         <label className="sr-only" htmlFor="entry-textarea">What’s on your mind?</label>
         <div className="text-slate-500 mb-2">What’s on your mind?</div>
